@@ -171,27 +171,27 @@
 			window.URL = window.URL || window.webkitURL;
 			window.BlobBuilder = window.BlobBuilder || window.WebKitBlobBuilder || window.MozBlobBuilder;
 
-			Number.prototype.format = function (){
+			Number.prototype.format = function () {
 				return this.toString().replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1,");
 			};
 
 			//
 
-			var editor = new Editor();
+			var editor = new Editor(); // editor 主体 定义一场景变量和场景基本操作
 
-			var viewport = new Viewport( editor );
+			var viewport = new Viewport( editor ); // 用户交互control
 			document.body.appendChild( viewport.dom );
 
-			var toolbar = new Toolbar( editor );
+			var toolbar = new Toolbar( editor ); // 底部控制按钮（旋转、缩放）
 			document.body.appendChild( toolbar.dom );
 
-			var script = new Script( editor );
+			var script = new Script( editor ); // script 编辑器
 			document.body.appendChild( script.dom );
 
-			var player = new Player( editor );
+			var player = new Player( editor ); // 渲染器
 			document.body.appendChild( player.dom );
 
-			var sidebar = new Sidebar( editor );
+			var sidebar = new Sidebar( editor ); // 右侧菜单
 			document.body.appendChild( sidebar.dom );
 
 			var menubar = new Menubar( editor );
