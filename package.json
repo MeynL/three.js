@@ -1,12 +1,15 @@
 {
   "name": "three",
-  "version": "0.104.0",
+  "version": "10.106.0",
   "description": "JavaScript 3D library",
   "main": "build/three.js",
   "repository": "mrdoob/three.js",
   "jsnext:main": "build/three.module.js",
   "module": "build/three.module.js",
   "types": "src/Three.d.ts",
+  "publishConfig": {
+    "registry": "http://192.168.0.200:8081/repository/tamu-npm-host/"
+  },
   "files": [
     "build/three.js",
     "build/three.min.js",

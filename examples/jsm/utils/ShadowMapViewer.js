@@ -38,7 +38,7 @@ import {
 	ShaderMaterial,
 	Texture,
 	UniformsUtils
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 import { UnpackDepthRGBAShader } from "../shaders/UnpackDepthRGBAShader.js";
 
 var ShadowMapViewer = function ( light ) {

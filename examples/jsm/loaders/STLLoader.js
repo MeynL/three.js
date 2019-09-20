@@ -37,7 +37,7 @@ import {
 	Float32BufferAttribute,
 	LoaderUtils,
 	Vector3
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 
 
 var STLLoader = function ( manager ) {

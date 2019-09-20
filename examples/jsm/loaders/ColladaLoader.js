@@ -40,7 +40,7 @@ import {
 	TextureLoader,
 	Vector3,
 	VectorKeyframeTrack
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 import { TGALoader } from "../loaders/TGALoader.js";
 
 var ColladaLoader = function ( manager ) {

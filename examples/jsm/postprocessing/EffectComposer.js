@@ -11,7 +11,7 @@ import {
 	Vector2,
 	Clock,
 	WebGLRenderTarget
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 import { CopyShader } from "../shaders/CopyShader.js";
 import { ShaderPass } from "../postprocessing/ShaderPass.js";
 import { MaskPass } from "../postprocessing/MaskPass.js";
@@ -305,4 +305,4 @@ Pass.FullScreenQuad = ( function () {
 
 } )();
 
-export { EffectComposer, Pass };
+export { EffectComposer };

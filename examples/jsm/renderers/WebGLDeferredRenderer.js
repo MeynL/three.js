@@ -60,7 +60,7 @@ import {
 	Vector4,
 	WebGLRenderTarget,
 	WebGLRenderer
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 import { EffectComposer } from "../postprocessing/EffectComposer.js";
 import { ShaderPass } from "../postprocessing/ShaderPass.js";
 import { RenderPass } from "../postprocessing/RenderPass.js";

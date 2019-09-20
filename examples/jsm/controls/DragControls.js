@@ -6,13 +6,14 @@
 
 import {
 	Camera,
-	EventDispatcher,
 	Matrix4,
 	Plane,
 	Raycaster,
 	Vector2,
 	Vector3
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
+
+import { EventDispatcher } from "../../../src/core/EventDispatcher.js";
 
 var DragControls = function ( _objects, _camera, _domElement ) {
 

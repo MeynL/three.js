@@ -14,6 +14,8 @@ export class Fog implements IFog {
 
 	constructor( hex: number, near?: number, far?: number );
 
+	isFog: boolean;
+
 	name: string;
 
 	/**

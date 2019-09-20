@@ -8,9 +8,10 @@
 
 import {
 	Color,
-	EventDispatcher,
 	REVISION
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
+
+import { EventDispatcher } from "../../../src/core/EventDispatcher.js";
 
 var RaytracingRenderer = function ( parameters ) {
 

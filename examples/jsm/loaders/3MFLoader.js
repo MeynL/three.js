@@ -24,7 +24,7 @@ import {
 	Matrix4,
 	Mesh,
 	MeshPhongMaterial
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 
 var ThreeMFLoader = function ( manager ) {
 

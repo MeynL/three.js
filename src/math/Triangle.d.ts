@@ -1,4 +1,5 @@
 import { Vector3 } from './Vector3';
+import { Vector2 } from './Vector2';
 import { Plane } from './Plane';
 import { Box3 } from './Box3';
 

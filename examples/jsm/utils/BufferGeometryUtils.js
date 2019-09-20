@@ -9,7 +9,7 @@ import {
 	InterleavedBufferAttribute,
 	Vector2,
 	Vector3
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 
 var BufferGeometryUtils = {
 
@@ -485,7 +485,13 @@ var BufferGeometryUtils = {
 	 * @param {number} tolerance
 	 * @return {BufferGeometry>}
 	 */
-	mergeVertices: function ( geometry, tolerance = 1e-4 ) {
+	mergeVertices: function ( geometry, tolerance ) {
+
+		if ( tolerance === undefined ) {
+
+			tolerance = 1e-4;
+
+		}
 
 		tolerance = Math.max( tolerance, Number.EPSILON );
 
@@ -515,7 +521,7 @@ var BufferGeometryUtils = {
 			var morphAttr = geometry.morphAttributes[ name ];
 			if ( morphAttr ) {
 
-				morphAttrsArrays[ name ] = new Array( morphAttr.length ).fill().map( () => [] );
+				morphAttrsArrays[ name ] = new Array( morphAttr.length ).fill().map( function () { return [] });
 
 			}
 
@@ -539,7 +545,7 @@ var BufferGeometryUtils = {
 				for ( var k = 0; k < itemSize; k ++ ) {
 
 					// double tilde truncates the decimal value
-					hash += `${ ~ ~ ( attribute[ getters[ k ] ]( index ) * shiftMultiplier ) },`;
+					hash += ~~( attribute[ getters[ k ] ]( index ) * shiftMultiplier ) + ',';
 
 				}
 
@@ -592,7 +598,7 @@ var BufferGeometryUtils = {
 
 		// Generate typed arrays from new attribute arrays and update
 		// the attributeBuffers
-		const result = geometry.clone();
+		var result = geometry.clone();
 		for ( var i = 0, l = attributeNames.length; i < l; i ++ ) {
 
 			var name = attributeNames[ i ];

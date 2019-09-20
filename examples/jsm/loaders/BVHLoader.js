@@ -18,7 +18,7 @@ import {
 	Skeleton,
 	Vector3,
 	VectorKeyframeTrack
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 
 var BVHLoader = function ( manager ) {
 

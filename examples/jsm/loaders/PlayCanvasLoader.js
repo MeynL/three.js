@@ -14,7 +14,7 @@ import {
 	MeshPhongMaterial,
 	Uint16BufferAttribute,
 	Uint8BufferAttribute
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 
 var PlayCanvasLoader = function ( manager ) {
 

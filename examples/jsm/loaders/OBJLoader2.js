@@ -7,7 +7,7 @@ import {
 	DefaultLoadingManager,
 	FileLoader,
 	Group
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 
 import { Parser } from "./worker/independent/OBJLoader2Parser.js";
 import { MeshReceiver } from "./shared/MeshReceiver.js";

@@ -17,7 +17,7 @@ import {
 	PointLight,
 	Scene,
 	SpotLight
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 
 var BabylonLoader = function ( manager ) {
 

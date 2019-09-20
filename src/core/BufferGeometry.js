@@ -539,6 +539,13 @@ BufferGeometry.prototype = Object.assign( Object.create( EventDispatcher.prototy
 
 		}
 
+		if ( geometry.uvs3.length > 0 ) {
+
+			var uvs3 = new Float32Array( geometry.uvs3.length * 2 );
+			this.addAttribute( 'uv3', new BufferAttribute( uvs3, 2 ).copyVector2sArray( geometry.uvs3 ) );
+
+		}
+
 		// groups
 
 		this.groups = geometry.groups;

@@ -26,7 +26,7 @@ import {
 	Vector3,
 	Vector4,
 	VertexColors
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 
 var RenderableObject = function () {
 

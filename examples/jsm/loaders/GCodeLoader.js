@@ -18,7 +18,7 @@ import {
 	Group,
 	LineBasicMaterial,
 	LineSegments
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 
 var GCodeLoader = function ( manager ) {
 

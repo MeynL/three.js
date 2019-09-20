@@ -12,7 +12,7 @@ import {
 	Object3D,
 	ParametricGeometry,
 	Vector3
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 
 var ParametricGeometries = {
 

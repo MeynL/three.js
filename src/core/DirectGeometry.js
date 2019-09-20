@@ -11,6 +11,7 @@ function DirectGeometry() {
 	this.colors = [];
 	this.uvs = [];
 	this.uvs2 = [];
+	this.uvs3 = [];
 
 	this.groups = [];
 
@@ -89,6 +90,7 @@ Object.assign( DirectGeometry.prototype, {
 
 		var hasFaceVertexUv = faceVertexUvs[ 0 ] && faceVertexUvs[ 0 ].length > 0;
 		var hasFaceVertexUv2 = faceVertexUvs[ 1 ] && faceVertexUvs[ 1 ].length > 0;
+		var hasFaceVertexUv3 = faceVertexUvs[ 2 ] && faceVertexUvs[ 2 ].length > 0;
 
 		// morphs
 
@@ -221,6 +223,22 @@ Object.assign( DirectGeometry.prototype, {
 				}
 
 			}
+			if ( hasFaceVertexUv3 === true ) {
+				var vertexUvs = faceVertexUvs[ 2 ][ i ];
+
+				if ( vertexUvs !== undefined ) {
+
+					this.uvs3.push( vertexUvs[ 0 ], vertexUvs[ 1 ], vertexUvs[ 2 ] );
+
+				} else {
+
+					console.warn( 'THREE.DirectGeometry.fromGeometry(): Undefined vertexUv2 ', i );
+
+					this.uvs3.push( new Vector2(), new Vector2(), new Vector2() );
+
+				}
+
+			}
 
 			// morphs
 
@@ -263,7 +281,6 @@ Object.assign( DirectGeometry.prototype, {
 		this.colorsNeedUpdate = geometry.colorsNeedUpdate;
 		this.uvsNeedUpdate = geometry.uvsNeedUpdate;
 		this.groupsNeedUpdate = geometry.groupsNeedUpdate;
-
 		return this;
 
 	}

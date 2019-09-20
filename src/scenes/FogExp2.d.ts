@@ -9,6 +9,7 @@ export class FogExp2 implements IFog {
 
 	name: string;
 	color: Color;
+	isFogExp2: boolean;
 
 	/**
    * Defines how fast the fog will grow dense.

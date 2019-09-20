@@ -225,10 +225,12 @@ Geometry.prototype = Object.assign( Object.create( EventDispatcher.prototype ), 
 		var colors = attributes.color !== undefined ? attributes.color.array : undefined;
 		var uvs = attributes.uv !== undefined ? attributes.uv.array : undefined;
 		var uvs2 = attributes.uv2 !== undefined ? attributes.uv2.array : undefined;
+		var uvs3 = attributes.uv3 !== undefined ? attributes.uv3.array : undefined;
 
 		if ( uvs2 !== undefined ) this.faceVertexUvs[ 1 ] = [];
+		if ( uvs3 !== undefined ) this.faceVertexUvs[ 2 ] = [];
 
-		for ( var i = 0; i < positions.length; i += 3 ) {
+		for ( var i = 0, j = 0; i < positions.length; i += 3, j += 2 ) {
 
 			scope.vertices.push( new Vector3().fromArray( positions, i ) );
 
@@ -273,6 +275,15 @@ Geometry.prototype = Object.assign( Object.create( EventDispatcher.prototype ), 
 					new Vector2().fromArray( uvs2, a * 2 ),
 					new Vector2().fromArray( uvs2, b * 2 ),
 					new Vector2().fromArray( uvs2, c * 2 )
+				] );
+
+			}
+			if ( uvs3 !== undefined ) {
+
+				scope.faceVertexUvs[ 2 ].push( [
+					new Vector2().fromArray( uvs3, a * 2 ),
+					new Vector2().fromArray( uvs3, b * 2 ),
+					new Vector2().fromArray( uvs3, c * 2 )
 				] );
 
 			}

@@ -8,7 +8,7 @@ import {
 	DefaultLoadingManager,
 	FileLoader,
 	Float32BufferAttribute
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 
 var PDBLoader = function ( manager ) {
 

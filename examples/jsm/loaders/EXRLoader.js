@@ -14,7 +14,7 @@ import {
 	FloatType,
 	RGBAFormat,
 	RGBFormat
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
 
 // /*
 // Copyright (c) 2014 - 2017, Syoyo Fujita

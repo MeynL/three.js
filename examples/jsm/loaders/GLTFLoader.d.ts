@@ -13,7 +13,7 @@ export interface GLTF {
   asset: object;
 }
 
-export class GLTFLoader {
+export class GLTFLoader{
   constructor(manager?: LoadingManager);
   manager: LoadingManager;
   path: string;

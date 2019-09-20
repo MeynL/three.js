@@ -7,13 +7,14 @@
 
 import {
 	Box3,
-	EventDispatcher,
 	Matrix3,
 	Sphere,
 	Spherical,
 	Vector2,
 	Vector3
-} from "../../../build/three.module.js";
+} from "../../../src/Three.js";
+
+import { EventDispatcher } from "../../../src/core/EventDispatcher.js";
 
 var EditorControls = function ( object, domElement ) {
 
