@@ -16,6 +16,7 @@ function DataTextureLoader( manager ) {
 	// override in sub classes
 	this._parser = null;
 
+
 }
 
 Object.assign( DataTextureLoader.prototype, {

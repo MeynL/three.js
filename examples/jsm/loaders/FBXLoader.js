@@ -145,9 +145,10 @@ Object.assign(FBXLoader.prototype, {
 		// console.log( FBXTree );
 
 		var connections = parseConnections(FBXTree);
-		var images = parseImages(FBXTree);
-		var textures = parseTextures(FBXTree, new TextureLoader(this.manager).setPath(resourceDirectory), images, connections);
-		var materials = parseMaterials(FBXTree, textures, connections);
+		// var images = parseImages(FBXTree);
+		// var textures = parseTextures(FBXTree, new TextureLoader(this.manager).setPath(resourceDirectory), images, connections);
+		// var materials = parseMaterials(FBXTree, textures, connections);
+		var materials = new Map();
 		var skeletons = parseDeformers(FBXTree, connections);
 		var geometryMap = parseGeometries(FBXTree, connections, skeletons);
 		var sceneGraph = parseScene(FBXTree, connections, skeletons, geometryMap, materials);
@@ -705,6 +706,7 @@ function parseGeometries(FBXTree, connections, skeletons) {
 			var relationships = connections.get(parseInt(nodeID));
 			var geo = parseGeometry(FBXTree, relationships, geometryNodes[nodeID], skeletons);
 
+			// geometryMap.set(parseInt(nodeID), new BufferGeometry());
 			geometryMap.set(parseInt(nodeID), geo);
 
 		}
@@ -797,6 +799,7 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 	// create arrays to hold the final data used to build the buffergeometry
 	var vertexBuffer = [];
 	var normalBuffer = [];
+	var tangentBuffer = [];
 	var colorsBuffer = [];
 	var uvsBuffer = [];
 	var materialIndexBuffer = [];
@@ -818,6 +821,12 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 	if (geometryNode.LayerElementNormal) {
 
 		var normalInfo = getNormals(geometryNode.LayerElementNormal[0]);
+
+	}
+
+	if ( geometryNode.LayerElementTangent ) {
+
+		var tangentInfo = parseTangents( geometryNode.LayerElementTangent[ 0 ] );
 
 	}
 
@@ -866,6 +875,7 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 	var vertexPositionIndexes = [];
 	var faceNormals = [];
 	var faceColors = [];
+	var faceTangents = [];
 	var faceUVs = [];
 	var faceWeights = [];
 	var faceWeightIndices = [];
@@ -977,6 +987,14 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 			var data = getData(polygonVertexIndex, polygonIndex, vertexIndex, normalInfo);
 
 			faceNormals.push(data[0], data[1], data[2]);
+
+		}
+
+		if ( tangentInfo ) {
+
+			var data = getData( polygonVertexIndex, polygonIndex, vertexIndex, tangentInfo );
+
+			faceTangents.push( data[ 0 ], data[ 1 ], data[ 2 ], data[ 3 ] );
 
 		}
 
@@ -1099,6 +1117,25 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 
 				}
 
+				if (tangentInfo) {
+
+					tangentBuffer.push(faceTangents[0]);
+					tangentBuffer.push(faceTangents[1]);
+					tangentBuffer.push(faceTangents[2]);
+					tangentBuffer.push(faceTangents[3]);
+
+					tangentBuffer.push(faceTangents[(i - 1) * 4]);
+					tangentBuffer.push(faceTangents[(i - 1) * 4 + 1]);
+					tangentBuffer.push(faceTangents[(i - 1) * 4 + 2]);
+					tangentBuffer.push(faceTangents[(i - 1) * 4 + 3]);
+
+					tangentBuffer.push(faceTangents[i * 4]);
+					tangentBuffer.push(faceTangents[i * 4 + 1]);
+					tangentBuffer.push(faceTangents[i * 4 + 2]);
+					tangentBuffer.push(faceTangents[i * 4 + 3]);
+
+				}
+
 				if (uvInfo) {
 
 					uvInfo.forEach(function (uv, j) {
@@ -1126,6 +1163,7 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 			// reset arrays for the next face
 			vertexPositionIndexes = [];
 			faceNormals = [];
+			faceTangents = [];
 			faceColors = [];
 			faceUVs = [];
 			faceWeights = [];
@@ -1169,6 +1207,17 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 		normalMatrix.applyToBufferAttribute(normalAttribute);
 
 		geo.addAttribute('normal', normalAttribute);
+
+	}
+
+	if (tangentBuffer.length > 0) {
+
+		var tangentAttribute = new Float32BufferAttribute(tangentBuffer, 3);
+
+		// var normalMatrix = new Matrix3().getNormalMatrix(preTransform);
+		// normalMatrix.applyToBufferAttribute(normalAttribute);
+
+		geo.addAttribute('tangent', tangentAttribute);
 
 	}
 
@@ -1259,6 +1308,37 @@ function getNormals(NormalNode) {
 
 	return {
 		dataSize: 3,
+		buffer: buffer,
+		indices: indexBuffer,
+		mappingType: mappingType,
+		referenceType: referenceType
+	};
+
+}
+
+// Parse normal from FBXTree.Objects.Geometry.LayerElementNormal if it exists
+function parseTangents ( TangentNode ) {
+
+	var mappingType = TangentNode.MappingInformationType;
+	var referenceType = TangentNode.ReferenceInformationType;
+	var buffer = TangentNode.Tangents.a;
+	var indexBuffer = [];
+	if ( referenceType === 'IndexToDirect' ) {
+
+		if ( 'NormalIndex' in TangentNode ) {
+
+			indexBuffer = TangentNode.NormalIndex.a;
+
+		} else if ( 'NormalsIndex' in TangentNode ) {
+
+			indexBuffer = TangentNode.NormalsIndex.a;
+
+		}
+
+	}
+
+	return {
+		dataSize: 4,
 		buffer: buffer,
 		indices: indexBuffer,
 		mappingType: mappingType,
@@ -1594,6 +1674,7 @@ function parseModels(FBXTree, skeletons, geometryMap, materialMap, connections) 
 					break;
 
 			}
+			// console.log('node', node.attrName);
 
 			model.name = PropertyBinding.sanitizeNodeName(node.attrName);
 			model.ID = id;
@@ -1901,8 +1982,8 @@ function createMesh(FBXTree, relationships, geometryMap, materialMap) {
 
 	} else {
 
-		material = new MeshPhongMaterial({color: 0xcccccc});
-		materials.push(material);
+		// material = new MeshPhongMaterial({color: 0xcccccc});
+		// materials.push(material);
 
 	}
 

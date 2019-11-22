@@ -2,17 +2,18 @@
  * @author mrdoob / http://mrdoob.com/
  */
 
-import { Cache } from './Cache.js';
-import { DefaultLoadingManager } from './LoadingManager.js';
+import {Cache} from './Cache.js';
+import {DefaultLoadingManager} from './LoadingManager.js';
+import {XHRLoader} from '../Three.Legacy.js';
 
 
-function ImageLoader( manager ) {
+function ImageLoader(manager) {
 
-	this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
+	this.manager = (manager !== undefined) ? manager : DefaultLoadingManager;
 
 }
 
-Object.assign( ImageLoader.prototype, {
+Object.assign(ImageLoader.prototype, {
 
 	crossOrigin: 'anonymous',
 
@@ -87,22 +88,44 @@ Object.assign( ImageLoader.prototype, {
 		return image;
 
 	},
-
-	setCrossOrigin: function ( value ) {
+	// load: function (url, callback, options, oncontinue) {
+	// 	var scope = this;
+	// 	var img = document.createElementNS("http://www.w3.org/1999/xhtml", "img");
+	// 	if (img.onload = function () {
+	// 		URL.revokeObjectURL(img.src);
+	// 		if (callback) {
+	// 			callback(img);
+	// 		}
+	// 		scope.manager.itemEnd(url);
+	// 	}, 0 === url.indexOf("data:")) {
+	// 		/** @type {string} */
+	// 		img.src = url;
+	// 	} else {
+	// 		var loader = new XHRLoader;
+	// 		loader.setPath(this.path);
+	// 		loader.setResponseType("blob");
+	// 		loader.load(url, function (file) {
+	// 			/** @type {string} */
+	// 			img.src = URL.createObjectURL(file);
+	// 		}, options, oncontinue);
+	// 	}
+	// 	return scope.manager.itemStart(url), img;
+	// },
+	setCrossOrigin: function (value) {
 
 		this.crossOrigin = value;
 		return this;
 
 	},
 
-	setPath: function ( value ) {
+	setPath: function (value) {
 
 		this.path = value;
 		return this;
 
 	}
 
-} );
+});
 
 
-export { ImageLoader };
+export {ImageLoader};

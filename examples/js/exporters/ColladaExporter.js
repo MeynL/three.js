@@ -249,6 +249,40 @@ THREE.ColladaExporter.prototype = {
 					triangleInputs += `<input semantic="TEXCOORD" source="#${ uvName }" offset="0" set="0" />`;
 
 				}
+				// serialize uvs
+				if ( 'uv2' in bufferGeometry.attributes ) {
+
+					var uvName = `${ meshid }-texcoord`;
+					gnode += getAttribute( bufferGeometry.attributes.uv2, uvName, [ 'S', 'T' ], 'float' );
+					triangleInputs += `<input semantic="TEXCOORD1" source="#${ uvName }" offset="0" set="0" />`;
+
+				}
+				// serialize uvs
+				if ( 'uv3' in bufferGeometry.attributes ) {
+
+					var uvName = `${ meshid }-texcoord`;
+					gnode += getAttribute( bufferGeometry.attributes.uv3, uvName, [ 'S', 'T' ], 'float' );
+					triangleInputs += `<input semantic="TEXCOORD2" source="#${ uvName }" offset="0" set="0" />`;
+
+				}
+
+				// serialize uvs
+				if ( 'tangent' in bufferGeometry.attributes ) {
+
+					var uvName = `${ meshid }-texcoord`;
+					gnode += getAttribute( bufferGeometry.attributes.tangent, uvName, [ 'S', 'T' ], 'float' );
+					triangleInputs += `<input semantic="TANGENT" source="#${ uvName }" offset="0" set="0" />`;
+
+				}
+
+				// serialize colors
+				if ( 'color' in bufferGeometry.attributes ) {
+
+					var colName = `${ meshid }-color`;
+					gnode += getAttribute( bufferGeometry.attributes.color, colName, [ 'X', 'Y', 'Z' ], 'uint8' );
+					triangleInputs += `<input semantic="COLOR" source="#${ colName }" offset="0" />`;
+
+				}
 
 				// serialize colors
 				if ( 'color' in bufferGeometry.attributes ) {
@@ -535,8 +569,8 @@ THREE.ColladaExporter.prototype = {
 					matidsArray = new Array( materials.length );
 
 				}
-				matids = matidsArray.fill()
-					.map( ( v, i ) => processMaterial( materials[ i % materials.length ] ) );
+				// matids = matidsArray.fill()
+				// 	.map( ( v, i ) => processMaterial( materials[ i % materials.length ] ) );
 
 				node +=
 					`<instance_geometry url="#${ meshid }">` +

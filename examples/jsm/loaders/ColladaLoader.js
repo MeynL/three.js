@@ -2276,6 +2276,8 @@ ColladaLoader.prototype = {
 			var normal = { array: [], stride: 0 };
 			var uv = { array: [], stride: 0 };
 			var uv2 = { array: [], stride: 0 };
+			var uv3 = { array: [], stride: 0 };
+			var tangent = { array: [], stride: 0 };
 			var color = { array: [], stride: 0 };
 
 			var skinIndex = { array: [], stride: 4 };
@@ -2410,7 +2412,17 @@ ColladaLoader.prototype = {
 
 									case 'TEXCOORD1':
 										buildGeometryData( primitive, sources[ id ], input.offset, uv2.array );
-										uv.stride = sources[ id ].stride;
+										uv3.stride = sources[ id ].stride;
+										break;
+
+									case 'TEXCOORD2':
+										buildGeometryData( primitive, sources[ id ], input.offset, uv3.array );
+										uv3.stride = sources[ id ].stride;
+										break;
+
+									case 'TANGENT':
+										buildGeometryData( primitive, sources[ id ], input.offset, tangent.array );
+										tangent.stride = sources[ id ].stride;
 										break;
 
 									default:
@@ -2441,6 +2453,16 @@ ColladaLoader.prototype = {
 							uv2.stride = sources[ input.id ].stride;
 							break;
 
+						case 'TEXCOORD2':
+							buildGeometryData( primitive, sources[ id ], input.offset, uv3.array );
+							uv3.stride = sources[ id ].stride;
+							break;
+
+						case 'TANGENT':
+							buildGeometryData( primitive, sources[ id ], input.offset, tangent.array );
+							tangent.stride = sources[ id ].stride;
+							break;
+
 					}
 
 				}
@@ -2454,6 +2476,9 @@ ColladaLoader.prototype = {
 			if ( color.array.length > 0 ) geometry.addAttribute( 'color', new Float32BufferAttribute( color.array, color.stride ) );
 			if ( uv.array.length > 0 ) geometry.addAttribute( 'uv', new Float32BufferAttribute( uv.array, uv.stride ) );
 			if ( uv2.array.length > 0 ) geometry.addAttribute( 'uv2', new Float32BufferAttribute( uv2.array, uv2.stride ) );
+			if ( uv3.array.length > 0 ) geometry.addAttribute( 'uv3', new Float32BufferAttribute( uv3.array, uv3.stride ) );
+
+			if ( tangent.array.length > 0 ) geometry.addAttribute( 'tangent', new Float32BufferAttribute( tangent.array, tangent.stride ) );
 
 			if ( skinIndex.array.length > 0 ) geometry.addAttribute( 'skinIndex', new Float32BufferAttribute( skinIndex.array, skinIndex.stride ) );
 			if ( skinWeight.array.length > 0 ) geometry.addAttribute( 'skinWeight', new Float32BufferAttribute( skinWeight.array, skinWeight.stride ) );

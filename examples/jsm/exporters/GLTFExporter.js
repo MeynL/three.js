@@ -1738,6 +1738,7 @@ GLTFExporter.prototype = {
 
 			var gltfNode = {};
 
+			// 导出 rotate position scale 或者 matrix
 			if ( options.trs ) {
 
 				var rotation = object.quaternion.toArray();

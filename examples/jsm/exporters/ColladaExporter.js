@@ -261,6 +261,32 @@ ColladaExporter.prototype = {
 
 				}
 
+				// serialize uvs
+				if ( 'uv2' in bufferGeometry.attributes ) {
+
+					var uvName = `${ meshid }-texcoord1`;
+					gnode += getAttribute( bufferGeometry.attributes.uv2, uvName, [ 'S', 'T' ], 'float' );
+					triangleInputs += `<input semantic="TEXCOORD" source="#${ uvName }" offset="1" set="1" />`;
+
+				}
+				// serialize uvs
+				if ( 'uv3' in bufferGeometry.attributes ) {
+
+					var uvName = `${ meshid }-texcoord2`;
+					gnode += getAttribute( bufferGeometry.attributes.uv3, uvName, [ 'S', 'T' ], 'float' );
+					triangleInputs += `<input semantic="TEXCOORD" source="#${ uvName }" offset="2" set="2" />`;
+
+				}
+
+				// // serialize uvs
+				// if ( 'tangent' in bufferGeometry.attributes ) {
+				//
+				// 	var uvName = `${ meshid }-tangent`;
+				// 	gnode += getAttribute( bufferGeometry.attributes.tangent, uvName, [ 'S', 'T' ], 'float' );
+				// 	triangleInputs += `<input semantic="TANGENT" source="#${ uvName }" offset="0" set="0" />`;
+				//
+				// }
+
 				// serialize colors
 				if ( 'color' in bufferGeometry.attributes ) {
 

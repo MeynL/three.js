@@ -180,7 +180,7 @@ export { RaytracingRenderer } from '../examples/jsm/renderers/RaytracingRenderer
 export { SVGObject, SVGRenderer } from '../examples/jsm/renderers/SVGRenderer.js';
 export { SoftwareRenderer } from '../examples/jsm/renderers/SoftwareRenderer.js';
 export { VREffect } from '../examples/jsm/effects/VREffect.js';
-// export { ColladaExporter } from '../examples/jsm/exporters/ColladaExporter.js';
+export { ColladaExporter } from '../examples/jsm/exporters/ColladaExporter.js';
 export { GLTFExporter } from '../examples/jsm/exporters/GLTFExporter.js';
 export { OBJExporter } from '../examples/jsm/exporters/OBJExporter.js';
 export { STLExporter } from '../examples/jsm/exporters/STLExporter.js';
@@ -188,4 +188,9 @@ export { TeapotBufferGeometry } from '../examples/jsm/geometries/TeapotBufferGeo
 export { BufferGeometryUtils } from '../examples/jsm/utils/BufferGeometryUtils.js';
 export { FXAAShader } from '../examples/jsm/shaders/FXAAShader.js';
 export { DRACOLoader } from '../examples/jsm/loaders/DRACOLoader.js';
+export { PVRLoader } from '../examples/jsm/loaders/PVRLoader.js';
+export { DDSLoader } from '../examples/jsm/loaders/DDSLoader.js';
+export { BasisTextureLoader } from '../examples/jsm/loaders/BasisTextureLoader.js';
+// export { PMREMGenerator } from '../examples/jsm/loaders/PMREMGenerator.js';
+// export { EquirectangularToCubeGenerator } from '../examples/jsm/loaders/EquirectangularToCubeGenerator.js';
 

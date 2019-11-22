@@ -63,6 +63,7 @@ THREE.ColladaLoader.prototype = {
 	},
 
 	parse: function ( text, path ) {
+		console.log('text', text);
 
 		function getElementsByTagName( xml, name ) {
 
@@ -2236,6 +2237,8 @@ THREE.ColladaLoader.prototype = {
 			var normal = { array: [], stride: 0 };
 			var uv = { array: [], stride: 0 };
 			var uv2 = { array: [], stride: 0 };
+			var uv3 = { array: [], stride: 0 };
+			var tangent = { array: [], stride: 0 };
 			var color = { array: [], stride: 0 };
 
 			var skinIndex = { array: [], stride: 4 };
@@ -2370,7 +2373,17 @@ THREE.ColladaLoader.prototype = {
 
 									case 'TEXCOORD1':
 										buildGeometryData( primitive, sources[ id ], input.offset, uv2.array );
-										uv.stride = sources[ id ].stride;
+										uv2.stride = sources[ id ].stride;
+										break;
+
+									case 'TEXCOORD2':
+										buildGeometryData( primitive, sources[ id ], input.offset, uv3.array );
+										uv3.stride = sources[ id ].stride;
+										break;
+
+									case 'TANGENT':
+										buildGeometryData( primitive, sources[ id ], input.offset, tangent.array );
+										tangent.stride = sources[ id ].stride;
 										break;
 
 									default:
@@ -2401,6 +2414,16 @@ THREE.ColladaLoader.prototype = {
 							uv2.stride = sources[ input.id ].stride;
 							break;
 
+						case 'TEXCOORD2':
+							buildGeometryData( primitive, sources[ id ], input.offset, uv3.array );
+							uv3.stride = sources[ id ].stride;
+							break;
+
+						case 'TANGENT':
+							buildGeometryData( primitive, sources[ id ], input.offset, tangent.array );
+							tangent.stride = sources[ id ].stride;
+							break;
+
 					}
 
 				}
@@ -2414,6 +2437,10 @@ THREE.ColladaLoader.prototype = {
 			if ( color.array.length > 0 ) geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( color.array, color.stride ) );
 			if ( uv.array.length > 0 ) geometry.addAttribute( 'uv', new THREE.Float32BufferAttribute( uv.array, uv.stride ) );
 			if ( uv2.array.length > 0 ) geometry.addAttribute( 'uv2', new THREE.Float32BufferAttribute( uv2.array, uv2.stride ) );
+
+			if ( uv3.array.length > 0 ) geometry.addAttribute( 'uv3', new THREE.Float32BufferAttribute( uv3.array, uv3.stride ) );
+
+			if ( tangent.array.length > 0 ) geometry.addAttribute( 'tangent', new THREE.Float32BufferAttribute( tangent.array, tangent.stride ) );
 
 			if ( skinIndex.array.length > 0 ) geometry.addAttribute( 'skinIndex', new THREE.Float32BufferAttribute( skinIndex.array, skinIndex.stride ) );
 			if ( skinWeight.array.length > 0 ) geometry.addAttribute( 'skinWeight', new THREE.Float32BufferAttribute( skinWeight.array, skinWeight.stride ) );

@@ -32,6 +32,7 @@ var TransformControls = function ( camera, domElement ) {
 	Object3D.call( this );
 
 	domElement = ( domElement !== undefined ) ? domElement : document;
+	this.dom = domElement;
 
 	this.visible = false;
 
@@ -129,7 +130,7 @@ var TransformControls = function ( camera, domElement ) {
 
 		domElement.addEventListener( "mousedown", onPointerDown, false );
 		domElement.addEventListener( "touchstart", onPointerDown, false );
-		domElement.addEventListener( "mousemove", onPointerHover, false );
+		// domElement.addEventListener( "mousemove", onPointerHover, false );
 		domElement.addEventListener( "touchmove", onPointerHover, false );
 		domElement.addEventListener( "touchmove", onPointerMove, false );
 		document.addEventListener( "mouseup", onPointerUp, false );
@@ -143,7 +144,7 @@ var TransformControls = function ( camera, domElement ) {
 
 		domElement.removeEventListener( "mousedown", onPointerDown );
 		domElement.removeEventListener( "touchstart", onPointerDown );
-		domElement.removeEventListener( "mousemove", onPointerHover );
+		// domElement.removeEventListener( "mousemove", onPointerHover );
 		document.removeEventListener( "mousemove", onPointerMove );
 		domElement.removeEventListener( "touchmove", onPointerHover );
 		domElement.removeEventListener( "touchmove", onPointerMove );
@@ -594,7 +595,7 @@ var TransformControls = function ( camera, domElement ) {
 
 		if ( ! scope.enabled ) return;
 
-		document.addEventListener( "mousemove", onPointerMove, false );
+		scope.dom.addEventListener( "mousemove", onPointerMove, false );
 
 		scope.pointerHover( getPointer( event ) );
 		scope.pointerDown( getPointer( event ) );
@@ -613,7 +614,8 @@ var TransformControls = function ( camera, domElement ) {
 
 		if ( ! scope.enabled ) return;
 
-		document.removeEventListener( "mousemove", onPointerMove, false );
+		// document.removeEventListener( "mousemove", onPointerMove, false );
+		scope.dom.removeEventListener( "mousemove", onPointerMove, false );
 
 		scope.pointerUp( getPointer( event ) );
 

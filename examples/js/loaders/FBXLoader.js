@@ -120,6 +120,7 @@ THREE.FBXLoader = ( function () {
 
 			var textureLoader = new THREE.TextureLoader( this.manager ).setPath( this.resourcePath || path ).setCrossOrigin( this.crossOrigin );
 
+			console.log('fbxTree', fbxTree);
 			return new FBXTreeParser( textureLoader ).parse( fbxTree );
 
 		}
@@ -1607,11 +1608,15 @@ THREE.FBXLoader = ( function () {
 		// Generate a THREE.BufferGeometry from a node in FBXTree.Objects.Geometry
 		genGeometry: function ( geoNode, skeleton, morphTarget, preTransform ) {
 
+
 			var geo = new THREE.BufferGeometry();
 			if ( geoNode.attrName ) geo.name = geoNode.attrName;
 
 			var geoInfo = this.parseGeoNode( geoNode, skeleton );
+			console.log('geoNode====', geoNode);
+			console.log('geoInfo====', geoInfo);
 			var buffers = this.genBuffers( geoInfo );
+			console.log('buffer', buffers);
 
 			var positionAttribute = new THREE.Float32BufferAttribute( buffers.vertex, 3 );
 
@@ -1644,6 +1649,17 @@ THREE.FBXLoader = ( function () {
 				normalMatrix.applyToBufferAttribute( normalAttribute );
 
 				geo.addAttribute( 'normal', normalAttribute );
+
+			}
+
+			if ( buffers.tangent.length > 0 ) {
+
+				var tangentAttribute = new THREE.Float32BufferAttribute( buffers.normal, 4 );
+
+				// var normalMatrix = new THREE.Matrix3().getNormalMatrix( preTransform );
+				// normalMatrix.applyToBufferAttribute( normalAttribute );
+
+				geo.addAttribute( 'tangent', tangentAttribute );
 
 			}
 
@@ -1737,6 +1753,12 @@ THREE.FBXLoader = ( function () {
 
 			}
 
+			if ( geoNode.LayerElementTangent ) {
+
+				geoInfo.tangent = this.parseTangents( geoNode.LayerElementTangent[ 0 ] );
+
+			}
+
 			if ( geoNode.LayerElementUV ) {
 
 				geoInfo.uv = [];
@@ -1787,6 +1809,7 @@ THREE.FBXLoader = ( function () {
 				vertex: [],
 				normal: [],
 				colors: [],
+				tangent: [],
 				uvs: [],
 				materialIndex: [],
 				vertexWeights: [],
@@ -1800,6 +1823,7 @@ THREE.FBXLoader = ( function () {
 			// these will hold data for a single face
 			var facePositionIndexes = [];
 			var faceNormals = [];
+			var faceTangents = [];
 			var faceColors = [];
 			var faceUVs = [];
 			var faceWeights = [];
@@ -1915,6 +1939,15 @@ THREE.FBXLoader = ( function () {
 
 				}
 
+				if ( geoInfo.tangent ) {
+
+					var data = getData( polygonVertexIndex, polygonIndex, vertexIndex, geoInfo.tangent );
+
+					faceTangents.push( data[ 0 ], data[ 1 ], data[ 2 ], data[ 3 ] );
+
+				}
+
+
 				if ( geoInfo.material && geoInfo.material.mappingType !== 'AllSame' ) {
 
 					var materialIndex = getData( polygonVertexIndex, polygonIndex, vertexIndex, geoInfo.material )[ 0 ];
@@ -1944,7 +1977,7 @@ THREE.FBXLoader = ( function () {
 
 				if ( endOfFace ) {
 
-					self.genFace( buffers, geoInfo, facePositionIndexes, materialIndex, faceNormals, faceColors, faceUVs, faceWeights, faceWeightIndices, faceLength );
+					self.genFace( buffers, geoInfo, facePositionIndexes, materialIndex, faceNormals, faceColors, faceUVs, faceWeights, faceWeightIndices, faceLength, faceTangents );
 
 					polygonIndex ++;
 					faceLength = 0;
@@ -1956,6 +1989,7 @@ THREE.FBXLoader = ( function () {
 					faceUVs = [];
 					faceWeights = [];
 					faceWeightIndices = [];
+					faceTangents = [];
 
 				}
 
@@ -1966,7 +2000,7 @@ THREE.FBXLoader = ( function () {
 		},
 
 		// Generate data for a single face in a geometry. If the face is a quad then split it into 2 tris
-		genFace: function ( buffers, geoInfo, facePositionIndexes, materialIndex, faceNormals, faceColors, faceUVs, faceWeights, faceWeightIndices, faceLength ) {
+		genFace: function ( buffers, geoInfo, facePositionIndexes, materialIndex, faceNormals, faceColors, faceUVs, faceWeights, faceWeightIndices, faceLength, faceTangents ) {
 
 			for ( var i = 2; i < faceLength; i ++ ) {
 
@@ -2053,6 +2087,22 @@ THREE.FBXLoader = ( function () {
 					buffers.normal.push( faceNormals[ i * 3 ] );
 					buffers.normal.push( faceNormals[ i * 3 + 1 ] );
 					buffers.normal.push( faceNormals[ i * 3 + 2 ] );
+
+				}
+
+				if ( geoInfo.tangent ) {
+
+					buffers.tangent.push( faceTangents[ 0 ] );
+					buffers.tangent.push( faceTangents[ 1 ] );
+					buffers.tangent.push( faceTangents[ 2 ] );
+
+					buffers.tangent.push( faceTangents[ ( i - 1 ) * 3 ] );
+					buffers.tangent.push( faceTangents[ ( i - 1 ) * 3 + 1 ] );
+					buffers.tangent.push( faceTangents[ ( i - 1 ) * 3 + 2 ] );
+
+					buffers.tangent.push( faceTangents[ i * 3 ] );
+					buffers.tangent.push( faceTangents[ i * 3 + 1 ] );
+					buffers.tangent.push( faceTangents[ i * 3 + 2 ] );
 
 				}
 
@@ -2170,6 +2220,37 @@ THREE.FBXLoader = ( function () {
 
 			return {
 				dataSize: 3,
+				buffer: buffer,
+				indices: indexBuffer,
+				mappingType: mappingType,
+				referenceType: referenceType
+			};
+
+		},
+
+		// Parse normal from FBXTree.Objects.Geometry.LayerElementNormal if it exists
+		parseTangents: function ( TangentNode ) {
+
+			var mappingType = TangentNode.MappingInformationType;
+			var referenceType = TangentNode.ReferenceInformationType;
+			var buffer = TangentNode.Tangents.a;
+			var indexBuffer = [];
+			if ( referenceType === 'IndexToDirect' ) {
+
+				if ( 'NormalIndex' in TangentNode ) {
+
+					indexBuffer = TangentNode.NormalIndex.a;
+
+				} else if ( 'NormalsIndex' in TangentNode ) {
+
+					indexBuffer = TangentNode.NormalsIndex.a;
+
+				}
+
+			}
+
+			return {
+				dataSize: 4,
 				buffer: buffer,
 				indices: indexBuffer,
 				mappingType: mappingType,
@@ -3267,6 +3348,7 @@ THREE.FBXLoader = ( function () {
 
 			var reader = new BinaryReader( buffer );
 			reader.skip( 23 ); // skip magic 23 bytes
+			console.log('reader', reader);
 
 			var version = reader.getUint32();
 

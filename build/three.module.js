@@ -34956,6 +34956,7 @@ function DataTextureLoader( manager ) {
 	// override in sub classes
 	this._parser = null;
 
+
 }
 
 Object.assign( DataTextureLoader.prototype, {
@@ -35040,238 +35041,409 @@ Object.assign( DataTextureLoader.prototype, {
 
 /**
  * @author mrdoob / http://mrdoob.com/
+ * @author Reece Aaron Lecrivain / http://reecenotes.com/
  */
 
+function Audio( listener ) {
 
-function ImageLoader( manager ) {
+	Object3D.call( this );
 
-	this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
+	this.type = 'Audio';
+
+	this.listener = listener;
+	this.context = listener.context;
+
+	this.gain = this.context.createGain();
+	this.gain.connect( listener.getInput() );
+
+	this.autoplay = false;
+
+	this.buffer = null;
+	this.detune = 0;
+	this.loop = false;
+	this.startTime = 0;
+	this.offset = 0;
+	this.playbackRate = 1;
+	this.isPlaying = false;
+	this.hasPlaybackControl = true;
+	this.sourceType = 'empty';
+
+	this.filters = [];
 
 }
 
-Object.assign( ImageLoader.prototype, {
+Audio.prototype = Object.assign( Object.create( Object3D.prototype ), {
 
-	crossOrigin: 'anonymous',
+	constructor: Audio,
 
-	load: function ( url, onLoad, onProgress, onError ) {
+	getOutput: function () {
 
-		if ( url === undefined ) url = '';
-
-		if ( this.path !== undefined ) url = this.path + url;
-
-		url = this.manager.resolveURL( url );
-
-		var scope = this;
-
-		var cached = Cache.get( url );
-
-		if ( cached !== undefined ) {
-
-			scope.manager.itemStart( url );
-
-			setTimeout( function () {
-
-				if ( onLoad ) onLoad( cached );
-
-				scope.manager.itemEnd( url );
-
-			}, 0 );
-
-			return cached;
-
-		}
-
-		var image = document.createElementNS( 'http://www.w3.org/1999/xhtml', 'img' );
-
-		function onImageLoad() {
-
-			image.removeEventListener( 'load', onImageLoad, false );
-			image.removeEventListener( 'error', onImageError, false );
-
-			Cache.add( url, this );
-
-			if ( onLoad ) onLoad( this );
-
-			scope.manager.itemEnd( url );
-
-		}
-
-		function onImageError( event ) {
-
-			image.removeEventListener( 'load', onImageLoad, false );
-			image.removeEventListener( 'error', onImageError, false );
-
-			if ( onError ) onError( event );
-
-			scope.manager.itemError( url );
-			scope.manager.itemEnd( url );
-
-		}
-
-		image.addEventListener( 'load', onImageLoad, false );
-		image.addEventListener( 'error', onImageError, false );
-
-		if ( url.substr( 0, 5 ) !== 'data:' ) {
-
-			if ( this.crossOrigin !== undefined ) image.crossOrigin = this.crossOrigin;
-
-		}
-
-		scope.manager.itemStart( url );
-
-		image.src = url;
-
-		return image;
+		return this.gain;
 
 	},
 
-	setCrossOrigin: function ( value ) {
+	setNodeSource: function ( audioNode ) {
 
-		this.crossOrigin = value;
+		this.hasPlaybackControl = false;
+		this.sourceType = 'audioNode';
+		this.source = audioNode;
+		this.connect();
+
 		return this;
 
 	},
 
-	setPath: function ( value ) {
+	setMediaElementSource: function ( mediaElement ) {
 
-		this.path = value;
-		return this;
+		this.hasPlaybackControl = false;
+		this.sourceType = 'mediaNode';
+		this.source = this.context.createMediaElementSource( mediaElement );
+		this.connect();
 
-	}
-
-} );
-
-/**
- * @author mrdoob / http://mrdoob.com/
- */
-
-
-function CubeTextureLoader( manager ) {
-
-	this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
-
-}
-
-Object.assign( CubeTextureLoader.prototype, {
-
-	crossOrigin: 'anonymous',
-
-	load: function ( urls, onLoad, onProgress, onError ) {
-
-		var texture = new CubeTexture();
-
-		var loader = new ImageLoader( this.manager );
-		loader.setCrossOrigin( this.crossOrigin );
-		loader.setPath( this.path );
-
-		var loaded = 0;
-
-		function loadTexture( i ) {
-
-			loader.load( urls[ i ], function ( image ) {
-
-				texture.images[ i ] = image;
-
-				loaded ++;
-
-				if ( loaded === 6 ) {
-
-					texture.needsUpdate = true;
-
-					if ( onLoad ) onLoad( texture );
-
-				}
-
-			}, undefined, onError );
-
-		}
-
-		for ( var i = 0; i < urls.length; ++ i ) {
-
-			loadTexture( i );
-
-		}
-
-		return texture;
-
-	},
-
-	setCrossOrigin: function ( value ) {
-
-		this.crossOrigin = value;
 		return this;
 
 	},
 
-	setPath: function ( value ) {
+	setBuffer: function ( audioBuffer ) {
 
-		this.path = value;
+		this.buffer = audioBuffer;
+		this.sourceType = 'buffer';
+
+		if ( this.autoplay ) this.play();
+
 		return this;
 
-	}
+	},
 
-} );
+	play: function () {
 
-/**
- * @author mrdoob / http://mrdoob.com/
- */
+		if ( this.isPlaying === true ) {
 
+			console.warn( 'THREE.Audio: Audio is already playing.' );
+			return;
 
-function TextureLoader( manager ) {
+		}
 
-	this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
+		if ( this.hasPlaybackControl === false ) {
 
-}
+			console.warn( 'THREE.Audio: this Audio has no playback control.' );
+			return;
 
-Object.assign( TextureLoader.prototype, {
+		}
 
-	crossOrigin: 'anonymous',
+		var source = this.context.createBufferSource();
 
-	load: function ( url, onLoad, onProgress, onError ) {
+		source.buffer = this.buffer;
+		source.loop = this.loop;
+		source.onended = this.onEnded.bind( this );
+		this.startTime = this.context.currentTime;
+		source.start( this.startTime, this.offset );
 
-		var texture = new Texture();
+		this.isPlaying = true;
 
-		var loader = new ImageLoader( this.manager );
-		loader.setCrossOrigin( this.crossOrigin );
-		loader.setPath( this.path );
+		this.source = source;
 
-		loader.load( url, function ( image ) {
+		this.setDetune( this.detune );
+		this.setPlaybackRate( this.playbackRate );
 
-			texture.image = image;
+		return this.connect();
 
-			// JPEGs can't have an alpha channel, so memory can be saved by storing them as RGB.
-			var isJPEG = url.search( /\.jpe?g($|\?)/i ) > 0 || url.search( /^data\:image\/jpeg/ ) === 0;
+	},
 
-			texture.format = isJPEG ? RGBFormat : RGBAFormat;
-			texture.needsUpdate = true;
+	pause: function () {
 
-			if ( onLoad !== undefined ) {
+		if ( this.hasPlaybackControl === false ) {
 
-				onLoad( texture );
+			console.warn( 'THREE.Audio: this Audio has no playback control.' );
+			return;
+
+		}
+
+		if ( this.isPlaying === true ) {
+
+			this.source.stop();
+			this.source.onended = null;
+			this.offset += ( this.context.currentTime - this.startTime ) * this.playbackRate;
+			this.isPlaying = false;
+
+		}
+
+		return this;
+
+	},
+
+	stop: function () {
+
+		if ( this.hasPlaybackControl === false ) {
+
+			console.warn( 'THREE.Audio: this Audio has no playback control.' );
+			return;
+
+		}
+
+		this.source.stop();
+		this.source.onended = null;
+		this.offset = 0;
+		this.isPlaying = false;
+
+		return this;
+
+	},
+
+	connect: function () {
+
+		if ( this.filters.length > 0 ) {
+
+			this.source.connect( this.filters[ 0 ] );
+
+			for ( var i = 1, l = this.filters.length; i < l; i ++ ) {
+
+				this.filters[ i - 1 ].connect( this.filters[ i ] );
 
 			}
 
-		}, onProgress, onError );
+			this.filters[ this.filters.length - 1 ].connect( this.getOutput() );
 
-		return texture;
+		} else {
 
-	},
+			this.source.connect( this.getOutput() );
 
-	setCrossOrigin: function ( value ) {
+		}
 
-		this.crossOrigin = value;
 		return this;
 
 	},
 
-	setPath: function ( value ) {
+	disconnect: function () {
 
-		this.path = value;
+		if ( this.filters.length > 0 ) {
+
+			this.source.disconnect( this.filters[ 0 ] );
+
+			for ( var i = 1, l = this.filters.length; i < l; i ++ ) {
+
+				this.filters[ i - 1 ].disconnect( this.filters[ i ] );
+
+			}
+
+			this.filters[ this.filters.length - 1 ].disconnect( this.getOutput() );
+
+		} else {
+
+			this.source.disconnect( this.getOutput() );
+
+		}
+
+		return this;
+
+	},
+
+	getFilters: function () {
+
+		return this.filters;
+
+	},
+
+	setFilters: function ( value ) {
+
+		if ( ! value ) value = [];
+
+		if ( this.isPlaying === true ) {
+
+			this.disconnect();
+			this.filters = value;
+			this.connect();
+
+		} else {
+
+			this.filters = value;
+
+		}
+
+		return this;
+
+	},
+
+	setDetune: function ( value ) {
+
+		this.detune = value;
+
+		if ( this.source.detune === undefined ) return; // only set detune when available
+
+		if ( this.isPlaying === true ) {
+
+			this.source.detune.setTargetAtTime( this.detune, this.context.currentTime, 0.01 );
+
+		}
+
+		return this;
+
+	},
+
+	getDetune: function () {
+
+		return this.detune;
+
+	},
+
+	getFilter: function () {
+
+		return this.getFilters()[ 0 ];
+
+	},
+
+	setFilter: function ( filter ) {
+
+		return this.setFilters( filter ? [ filter ] : [] );
+
+	},
+
+	setPlaybackRate: function ( value ) {
+
+		if ( this.hasPlaybackControl === false ) {
+
+			console.warn( 'THREE.Audio: this Audio has no playback control.' );
+			return;
+
+		}
+
+		this.playbackRate = value;
+
+		if ( this.isPlaying === true ) {
+
+			this.source.playbackRate.setTargetAtTime( this.playbackRate, this.context.currentTime, 0.01 );
+
+		}
+
+		return this;
+
+	},
+
+	getPlaybackRate: function () {
+
+		return this.playbackRate;
+
+	},
+
+	onEnded: function () {
+
+		this.isPlaying = false;
+
+	},
+
+	getLoop: function () {
+
+		if ( this.hasPlaybackControl === false ) {
+
+			console.warn( 'THREE.Audio: this Audio has no playback control.' );
+			return false;
+
+		}
+
+		return this.loop;
+
+	},
+
+	setLoop: function ( value ) {
+
+		if ( this.hasPlaybackControl === false ) {
+
+			console.warn( 'THREE.Audio: this Audio has no playback control.' );
+			return;
+
+		}
+
+		this.loop = value;
+
+		if ( this.isPlaying === true ) {
+
+			this.source.loop = this.loop;
+
+		}
+
+		return this;
+
+	},
+
+	getVolume: function () {
+
+		return this.gain.gain.value;
+
+	},
+
+	setVolume: function ( value ) {
+
+		this.gain.gain.setTargetAtTime( value, this.context.currentTime, 0.01 );
+
 		return this;
 
 	}
 
 } );
+
+/**
+ * @author mrdoob / http://mrdoob.com/
+ */
+
+function AudioAnalyser( audio, fftSize ) {
+
+	this.analyser = audio.context.createAnalyser();
+	this.analyser.fftSize = fftSize !== undefined ? fftSize : 2048;
+
+	this.data = new Uint8Array( this.analyser.frequencyBinCount );
+
+	audio.getOutput().connect( this.analyser );
+
+}
+
+Object.assign( AudioAnalyser.prototype, {
+
+	getFrequencyData: function () {
+
+		this.analyser.getByteFrequencyData( this.data );
+
+		return this.data;
+
+	},
+
+	getAverageFrequency: function () {
+
+		var value = 0, data = this.getFrequencyData();
+
+		for ( var i = 0; i < data.length; i ++ ) {
+
+			value += data[ i ];
+
+		}
+
+		return value / data.length;
+
+	}
+
+} );
+
+/**
+ * @author mrdoob / http://mrdoob.com/
+ */
+
+function Uniform( value ) {
+
+	if ( typeof value === 'string' ) {
+
+		console.warn( 'THREE.Uniform: Type parameter is no longer needed.' );
+		value = arguments[ 1 ];
+
+	}
+
+	this.value = value;
+
+}
+
+Uniform.prototype.clone = function () {
+
+	return new Uniform( this.value.clone === undefined ? this.value : this.value.clone() );
+
+};
 
 /**
  * @author zz85 / http://www.lab4games.net/zz85/blog
@@ -37165,6 +37337,1135 @@ Path.prototype = Object.assign( Object.create( CurvePath.prototype ), {
 } );
 
 /**
+ * @author sroucheray / http://sroucheray.org/
+ * @author mrdoob / http://mrdoob.com/
+ */
+
+function AxesHelper( size ) {
+
+	size = size || 1;
+
+	var vertices = [
+		0, 0, 0,	size, 0, 0,
+		0, 0, 0,	0, size, 0,
+		0, 0, 0,	0, 0, size
+	];
+
+	var colors = [
+		1, 0, 0,	1, 0.6, 0,
+		0, 1, 0,	0.6, 1, 0,
+		0, 0, 1,	0, 0.6, 1
+	];
+
+	var geometry = new BufferGeometry();
+	geometry.addAttribute( 'position', new Float32BufferAttribute( vertices, 3 ) );
+	geometry.addAttribute( 'color', new Float32BufferAttribute( colors, 3 ) );
+
+	var material = new LineBasicMaterial( { vertexColors: VertexColors } );
+
+	LineSegments.call( this, geometry, material );
+
+}
+
+AxesHelper.prototype = Object.create( LineSegments.prototype );
+AxesHelper.prototype.constructor = AxesHelper;
+
+/**
+ * @author mrdoob / http://mrdoob.com/
+ * @author Mugen87 / http://github.com/Mugen87
+ */
+
+function BoxHelper( object, color ) {
+
+	this.object = object;
+
+	if ( color === undefined ) color = 0xffff00;
+
+	var indices = new Uint16Array( [ 0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7 ] );
+	var positions = new Float32Array( 8 * 3 );
+
+	var geometry = new BufferGeometry();
+	geometry.setIndex( new BufferAttribute( indices, 1 ) );
+	geometry.addAttribute( 'position', new BufferAttribute( positions, 3 ) );
+
+	LineSegments.call( this, geometry, new LineBasicMaterial( { color: color } ) );
+
+	this.matrixAutoUpdate = false;
+
+	this.update();
+
+}
+
+BoxHelper.prototype = Object.create( LineSegments.prototype );
+BoxHelper.prototype.constructor = BoxHelper;
+
+BoxHelper.prototype.update = ( function () {
+
+	var box = new Box3();
+
+	return function update( object ) {
+
+		if ( object !== undefined ) {
+
+			console.warn( 'THREE.BoxHelper: .update() has no longer arguments.' );
+
+		}
+
+		if ( this.object !== undefined ) {
+
+			box.setFromObject( this.object );
+
+		}
+
+		if ( box.isEmpty() ) return;
+
+		var min = box.min;
+		var max = box.max;
+
+		/*
+		  5____4
+		1/___0/|
+		| 6__|_7
+		2/___3/
+
+		0: max.x, max.y, max.z
+		1: min.x, max.y, max.z
+		2: min.x, min.y, max.z
+		3: max.x, min.y, max.z
+		4: max.x, max.y, min.z
+		5: min.x, max.y, min.z
+		6: min.x, min.y, min.z
+		7: max.x, min.y, min.z
+		*/
+
+		var position = this.geometry.attributes.position;
+		var array = position.array;
+
+		array[ 0 ] = max.x; array[ 1 ] = max.y; array[ 2 ] = max.z;
+		array[ 3 ] = min.x; array[ 4 ] = max.y; array[ 5 ] = max.z;
+		array[ 6 ] = min.x; array[ 7 ] = min.y; array[ 8 ] = max.z;
+		array[ 9 ] = max.x; array[ 10 ] = min.y; array[ 11 ] = max.z;
+		array[ 12 ] = max.x; array[ 13 ] = max.y; array[ 14 ] = min.z;
+		array[ 15 ] = min.x; array[ 16 ] = max.y; array[ 17 ] = min.z;
+		array[ 18 ] = min.x; array[ 19 ] = min.y; array[ 20 ] = min.z;
+		array[ 21 ] = max.x; array[ 22 ] = min.y; array[ 23 ] = min.z;
+
+		position.needsUpdate = true;
+
+		this.geometry.computeBoundingSphere();
+
+	};
+
+} )();
+
+BoxHelper.prototype.setFromObject = function ( object ) {
+
+	this.object = object;
+	this.update();
+
+	return this;
+
+};
+
+BoxHelper.prototype.copy = function ( source ) {
+
+	LineSegments.prototype.copy.call( this, source );
+
+	this.object = source.object;
+
+	return this;
+
+};
+
+BoxHelper.prototype.clone = function () {
+
+	return new this.constructor().copy( this );
+
+};
+
+/**
+ * @author mrdoob / http://mrdoob.com/
+ */
+
+function GridHelper( size, divisions, color1, color2 ) {
+
+	size = size || 10;
+	divisions = divisions || 10;
+	color1 = new Color( color1 !== undefined ? color1 : 0x444444 );
+	color2 = new Color( color2 !== undefined ? color2 : 0x888888 );
+
+	var center = divisions / 2;
+	var step = size / divisions;
+	var halfSize = size / 2;
+
+	var vertices = [], colors = [];
+
+	for ( var i = 0, j = 0, k = - halfSize; i <= divisions; i ++, k += step ) {
+
+		vertices.push( - halfSize, 0, k, halfSize, 0, k );
+		vertices.push( k, 0, - halfSize, k, 0, halfSize );
+
+		var color = i === center ? color1 : color2;
+
+		color.toArray( colors, j ); j += 3;
+		color.toArray( colors, j ); j += 3;
+		color.toArray( colors, j ); j += 3;
+		color.toArray( colors, j ); j += 3;
+
+	}
+
+	var geometry = new BufferGeometry();
+	geometry.addAttribute( 'position', new Float32BufferAttribute( vertices, 3 ) );
+	geometry.addAttribute( 'color', new Float32BufferAttribute( colors, 3 ) );
+
+	var material = new LineBasicMaterial( { vertexColors: VertexColors } );
+
+	LineSegments.call( this, geometry, material );
+
+}
+
+GridHelper.prototype = Object.assign( Object.create( LineSegments.prototype ), {
+
+	constructor: GridHelper,
+
+	copy: function ( source ) {
+
+		LineSegments.prototype.copy.call( this, source );
+
+		this.geometry.copy( source.geometry );
+		this.material.copy( source.material );
+
+		return this;
+
+	},
+
+	clone: function () {
+
+		return new this.constructor().copy( this );
+
+	}
+
+} );
+
+/**
+ * @author Sean Griffin / http://twitter.com/sgrif
+ * @author Michael Guerrero / http://realitymeltdown.com
+ * @author mrdoob / http://mrdoob.com/
+ * @author ikerr / http://verold.com
+ * @author Mugen87 / https://github.com/Mugen87
+ */
+
+function getBoneList( object ) {
+
+	var boneList = [];
+
+	if ( object && object.isBone ) {
+
+		boneList.push( object );
+
+	}
+
+	for ( var i = 0; i < object.children.length; i ++ ) {
+
+		boneList.push.apply( boneList, getBoneList( object.children[ i ] ) );
+
+	}
+
+	return boneList;
+
+}
+
+function SkeletonHelper( object ) {
+
+	var bones = getBoneList( object );
+
+	var geometry = new BufferGeometry();
+
+	var vertices = [];
+	var colors = [];
+
+	var color1 = new Color( 0, 0, 1 );
+	var color2 = new Color( 0, 1, 0 );
+
+	for ( var i = 0; i < bones.length; i ++ ) {
+
+		var bone = bones[ i ];
+
+		if ( bone.parent && bone.parent.isBone ) {
+
+			vertices.push( 0, 0, 0 );
+			vertices.push( 0, 0, 0 );
+			colors.push( color1.r, color1.g, color1.b );
+			colors.push( color2.r, color2.g, color2.b );
+
+		}
+
+	}
+
+	geometry.addAttribute( 'position', new Float32BufferAttribute( vertices, 3 ) );
+	geometry.addAttribute( 'color', new Float32BufferAttribute( colors, 3 ) );
+
+	var material = new LineBasicMaterial( { vertexColors: VertexColors, depthTest: false, depthWrite: false, transparent: true } );
+
+	LineSegments.call( this, geometry, material );
+
+	this.root = object;
+	this.bones = bones;
+
+	this.matrix = object.matrixWorld;
+	this.matrixAutoUpdate = false;
+
+}
+
+SkeletonHelper.prototype = Object.create( LineSegments.prototype );
+SkeletonHelper.prototype.constructor = SkeletonHelper;
+
+SkeletonHelper.prototype.updateMatrixWorld = function () {
+
+	var vector = new Vector3();
+
+	var boneMatrix = new Matrix4();
+	var matrixWorldInv = new Matrix4();
+
+	return function updateMatrixWorld( force ) {
+
+		var bones = this.bones;
+
+		var geometry = this.geometry;
+		var position = geometry.getAttribute( 'position' );
+
+		matrixWorldInv.getInverse( this.root.matrixWorld );
+
+		for ( var i = 0, j = 0; i < bones.length; i ++ ) {
+
+			var bone = bones[ i ];
+
+			if ( bone.parent && bone.parent.isBone ) {
+
+				boneMatrix.multiplyMatrices( matrixWorldInv, bone.matrixWorld );
+				vector.setFromMatrixPosition( boneMatrix );
+				position.setXYZ( j, vector.x, vector.y, vector.z );
+
+				boneMatrix.multiplyMatrices( matrixWorldInv, bone.parent.matrixWorld );
+				vector.setFromMatrixPosition( boneMatrix );
+				position.setXYZ( j + 1, vector.x, vector.y, vector.z );
+
+				j += 2;
+
+			}
+
+		}
+
+		geometry.getAttribute( 'position' ).needsUpdate = true;
+
+		Object3D.prototype.updateMatrixWorld.call( this, force );
+
+	};
+
+}();
+
+/**
+ * @author mrdoob / http://mrdoob.com/
+ * @author alteredq / http://alteredqualia.com/
+ */
+
+function Light( color, intensity ) {
+
+	Object3D.call( this );
+
+	this.type = 'Light';
+
+	this.color = new Color( color );
+	this.intensity = intensity !== undefined ? intensity : 1;
+
+	this.receiveShadow = undefined;
+
+}
+
+Light.prototype = Object.assign( Object.create( Object3D.prototype ), {
+
+	constructor: Light,
+
+	isLight: true,
+
+	copy: function ( source ) {
+
+		Object3D.prototype.copy.call( this, source );
+
+		this.color.copy( source.color );
+		this.intensity = source.intensity;
+
+		return this;
+
+	},
+
+	toJSON: function ( meta ) {
+
+		var data = Object3D.prototype.toJSON.call( this, meta );
+
+		data.object.color = this.color.getHex();
+		data.object.intensity = this.intensity;
+
+		if ( this.groundColor !== undefined ) data.object.groundColor = this.groundColor.getHex();
+
+		if ( this.distance !== undefined ) data.object.distance = this.distance;
+		if ( this.angle !== undefined ) data.object.angle = this.angle;
+		if ( this.decay !== undefined ) data.object.decay = this.decay;
+		if ( this.penumbra !== undefined ) data.object.penumbra = this.penumbra;
+
+		if ( this.shadow !== undefined ) data.object.shadow = this.shadow.toJSON();
+
+		return data;
+
+	}
+
+} );
+
+/**
+ * @author mrdoob / http://mrdoob.com/
+ */
+
+function MaterialLoader( manager ) {
+
+	this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
+	this.textures = {};
+
+}
+
+Object.assign( MaterialLoader.prototype, {
+
+	load: function ( url, onLoad, onProgress, onError ) {
+
+		var scope = this;
+
+		var loader = new FileLoader( scope.manager );
+		loader.setPath( scope.path );
+		loader.load( url, function ( text ) {
+
+			onLoad( scope.parse( JSON.parse( text ) ) );
+
+		}, onProgress, onError );
+
+	},
+
+	parse: function ( json ) {
+
+		var textures = this.textures;
+
+		function getTexture( name ) {
+
+			if ( textures[ name ] === undefined ) {
+
+				console.warn( 'THREE.MaterialLoader: Undefined texture', name );
+
+			}
+
+			return textures[ name ];
+
+		}
+
+		var material = new Materials[ json.type ]();
+
+		if ( json.uuid !== undefined ) material.uuid = json.uuid;
+		if ( json.name !== undefined ) material.name = json.name;
+		if ( json.color !== undefined ) material.color.setHex( json.color );
+		if ( json.roughness !== undefined ) material.roughness = json.roughness;
+		if ( json.metalness !== undefined ) material.metalness = json.metalness;
+		if ( json.emissive !== undefined ) material.emissive.setHex( json.emissive );
+		if ( json.specular !== undefined ) material.specular.setHex( json.specular );
+		if ( json.shininess !== undefined ) material.shininess = json.shininess;
+		if ( json.clearCoat !== undefined ) material.clearCoat = json.clearCoat;
+		if ( json.clearCoatRoughness !== undefined ) material.clearCoatRoughness = json.clearCoatRoughness;
+		if ( json.vertexColors !== undefined ) material.vertexColors = json.vertexColors;
+		if ( json.fog !== undefined ) material.fog = json.fog;
+		if ( json.flatShading !== undefined ) material.flatShading = json.flatShading;
+		if ( json.blending !== undefined ) material.blending = json.blending;
+		if ( json.combine !== undefined ) material.combine = json.combine;
+		if ( json.side !== undefined ) material.side = json.side;
+		if ( json.opacity !== undefined ) material.opacity = json.opacity;
+		if ( json.transparent !== undefined ) material.transparent = json.transparent;
+		if ( json.alphaTest !== undefined ) material.alphaTest = json.alphaTest;
+		if ( json.depthTest !== undefined ) material.depthTest = json.depthTest;
+		if ( json.depthWrite !== undefined ) material.depthWrite = json.depthWrite;
+		if ( json.colorWrite !== undefined ) material.colorWrite = json.colorWrite;
+		if ( json.wireframe !== undefined ) material.wireframe = json.wireframe;
+		if ( json.wireframeLinewidth !== undefined ) material.wireframeLinewidth = json.wireframeLinewidth;
+		if ( json.wireframeLinecap !== undefined ) material.wireframeLinecap = json.wireframeLinecap;
+		if ( json.wireframeLinejoin !== undefined ) material.wireframeLinejoin = json.wireframeLinejoin;
+
+		if ( json.rotation !== undefined ) material.rotation = json.rotation;
+
+		if ( json.linewidth !== 1 ) material.linewidth = json.linewidth;
+		if ( json.dashSize !== undefined ) material.dashSize = json.dashSize;
+		if ( json.gapSize !== undefined ) material.gapSize = json.gapSize;
+		if ( json.scale !== undefined ) material.scale = json.scale;
+
+		if ( json.polygonOffset !== undefined ) material.polygonOffset = json.polygonOffset;
+		if ( json.polygonOffsetFactor !== undefined ) material.polygonOffsetFactor = json.polygonOffsetFactor;
+		if ( json.polygonOffsetUnits !== undefined ) material.polygonOffsetUnits = json.polygonOffsetUnits;
+
+		if ( json.skinning !== undefined ) material.skinning = json.skinning;
+		if ( json.morphTargets !== undefined ) material.morphTargets = json.morphTargets;
+		if ( json.dithering !== undefined ) material.dithering = json.dithering;
+
+		if ( json.visible !== undefined ) material.visible = json.visible;
+		if ( json.userData !== undefined ) material.userData = json.userData;
+
+		// Shader Material
+
+		if ( json.uniforms !== undefined ) {
+
+			for ( var name in json.uniforms ) {
+
+				var uniform = json.uniforms[ name ];
+
+				material.uniforms[ name ] = {};
+
+				switch ( uniform.type ) {
+
+					case 't':
+						material.uniforms[ name ].value = getTexture( uniform.value );
+						break;
+
+					case 'c':
+						material.uniforms[ name ].value = new Color().setHex( uniform.value );
+						break;
+
+					case 'v2':
+						material.uniforms[ name ].value = new Vector2().fromArray( uniform.value );
+						break;
+
+					case 'v3':
+						material.uniforms[ name ].value = new Vector3().fromArray( uniform.value );
+						break;
+
+					case 'v4':
+						material.uniforms[ name ].value = new Vector4().fromArray( uniform.value );
+						break;
+
+					case 'm3':
+						material.uniforms[ name ].value = new Matrix3().fromArray( uniform.value );
+
+					case 'm4':
+						material.uniforms[ name ].value = new Matrix4().fromArray( uniform.value );
+						break;
+
+					default:
+						material.uniforms[ name ].value = uniform.value;
+
+				}
+
+			}
+
+		}
+
+		if ( json.defines !== undefined ) material.defines = json.defines;
+		if ( json.vertexShader !== undefined ) material.vertexShader = json.vertexShader;
+		if ( json.fragmentShader !== undefined ) material.fragmentShader = json.fragmentShader;
+
+		if ( json.extensions !== undefined ) {
+
+			for ( var key in json.extensions ) {
+
+				material.extensions[ key ] = json.extensions[ key ];
+
+			}
+
+		}
+
+		// Deprecated
+
+		if ( json.shading !== undefined ) material.flatShading = json.shading === 1; // THREE.FlatShading
+
+		// for PointsMaterial
+
+		if ( json.size !== undefined ) material.size = json.size;
+		if ( json.sizeAttenuation !== undefined ) material.sizeAttenuation = json.sizeAttenuation;
+
+		// maps
+
+		if ( json.map !== undefined ) material.map = getTexture( json.map );
+		if ( json.matcap !== undefined ) material.matcap = getTexture( json.matcap );
+
+		if ( json.alphaMap !== undefined ) {
+
+			material.alphaMap = getTexture( json.alphaMap );
+			material.transparent = true;
+
+		}
+
+		if ( json.bumpMap !== undefined ) material.bumpMap = getTexture( json.bumpMap );
+		if ( json.bumpScale !== undefined ) material.bumpScale = json.bumpScale;
+
+		if ( json.normalMap !== undefined ) material.normalMap = getTexture( json.normalMap );
+		if ( json.normalMapType !== undefined ) material.normalMapType = json.normalMapType;
+		if ( json.normalScale !== undefined ) {
+
+			var normalScale = json.normalScale;
+
+			if ( Array.isArray( normalScale ) === false ) {
+
+				// Blender exporter used to export a scalar. See #7459
+
+				normalScale = [ normalScale, normalScale ];
+
+			}
+
+			material.normalScale = new Vector2().fromArray( normalScale );
+
+		}
+
+		if ( json.displacementMap !== undefined ) material.displacementMap = getTexture( json.displacementMap );
+		if ( json.displacementScale !== undefined ) material.displacementScale = json.displacementScale;
+		if ( json.displacementBias !== undefined ) material.displacementBias = json.displacementBias;
+
+		if ( json.roughnessMap !== undefined ) material.roughnessMap = getTexture( json.roughnessMap );
+		if ( json.metalnessMap !== undefined ) material.metalnessMap = getTexture( json.metalnessMap );
+
+		if ( json.emissiveMap !== undefined ) material.emissiveMap = getTexture( json.emissiveMap );
+		if ( json.emissiveIntensity !== undefined ) material.emissiveIntensity = json.emissiveIntensity;
+
+		if ( json.specularMap !== undefined ) material.specularMap = getTexture( json.specularMap );
+
+		if ( json.envMap !== undefined ) material.envMap = getTexture( json.envMap );
+		if ( json.envMapIntensity !== undefined ) material.envMapIntensity = json.envMapIntensity;
+
+		if ( json.reflectivity !== undefined ) material.reflectivity = json.reflectivity;
+
+		if ( json.lightMap !== undefined ) material.lightMap = getTexture( json.lightMap );
+		if ( json.lightMapIntensity !== undefined ) material.lightMapIntensity = json.lightMapIntensity;
+
+		if ( json.aoMap !== undefined ) material.aoMap = getTexture( json.aoMap );
+		if ( json.aoMapIntensity !== undefined ) material.aoMapIntensity = json.aoMapIntensity;
+
+		if ( json.gradientMap !== undefined ) material.gradientMap = getTexture( json.gradientMap );
+
+		return material;
+
+	},
+
+	setPath: function ( value ) {
+
+		this.path = value;
+		return this;
+
+	},
+
+	setTextures: function ( value ) {
+
+		this.textures = value;
+		return this;
+
+	}
+
+} );
+
+/**
+ * @author mrdoob / http://mrdoob.com/
+ */
+
+
+function TextureLoader( manager ) {
+
+	this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
+
+}
+
+Object.assign( TextureLoader.prototype, {
+
+	crossOrigin: 'anonymous',
+
+	load: function ( url, onLoad, onProgress, onError ) {
+
+		var texture = new Texture();
+
+		var loader = new ImageLoader( this.manager );
+		loader.setCrossOrigin( this.crossOrigin );
+		loader.setPath( this.path );
+
+		// setTimeout( function () {
+		loader.load( url, function ( image ) {
+
+			texture.image = image;
+
+			// JPEGs can't have an alpha channel, so memory can be saved by storing them as RGB.
+			var isJPEG = url.search( /\.jpe?g($|\?)/i ) > 0 || url.search( /^datua\:image\/jpeg/ ) === 0;
+
+			texture.format = isJPEG ? RGBFormat : RGBAFormat;
+				texture.needsUpdate = true;
+
+			if ( onLoad !== undefined ) {
+
+				onLoad( texture );
+
+			}
+
+		}, onProgress, onError );
+		// }, ( Math.random() * 600 ) * 1000 );
+
+		return texture;
+
+	},
+
+	setCrossOrigin: function ( value ) {
+
+		this.crossOrigin = value;
+		return this;
+
+	},
+
+	setPath: function ( value ) {
+
+		this.path = value;
+		return this;
+
+	}
+
+} );
+
+/**
+ * @author alteredq / http://alteredqualia.com/
+ */
+
+function Loader() {}
+
+Loader.Handlers = {
+
+	handlers: [],
+
+	add: function ( regex, loader ) {
+
+		this.handlers.push( regex, loader );
+
+	},
+
+	get: function ( file ) {
+
+		var handlers = this.handlers;
+
+		for ( var i = 0, l = handlers.length; i < l; i += 2 ) {
+
+			var regex = handlers[ i ];
+			var loader = handlers[ i + 1 ];
+
+			if ( regex.test( file ) ) {
+
+				return loader;
+
+			}
+
+		}
+
+		return null;
+
+	}
+
+};
+
+Object.assign( Loader.prototype, {
+
+	crossOrigin: 'anonymous',
+
+	onLoadStart: function () {},
+
+	onLoadProgress: function () {},
+
+	onLoadComplete: function () {},
+
+	initMaterials: function ( materials, texturePath, crossOrigin ) {
+
+		var array = [];
+
+		for ( var i = 0; i < materials.length; ++ i ) {
+
+			array[ i ] = this.createMaterial( materials[ i ], texturePath, crossOrigin );
+
+		}
+
+		return array;
+
+	},
+
+	createMaterial: ( function () {
+
+		var BlendingMode = {
+			NoBlending: NoBlending,
+			NormalBlending: NormalBlending,
+			AdditiveBlending: AdditiveBlending,
+			SubtractiveBlending: SubtractiveBlending,
+			MultiplyBlending: MultiplyBlending,
+			CustomBlending: CustomBlending
+		};
+
+		var color = new Color();
+		var textureLoader = new TextureLoader();
+		var materialLoader = new MaterialLoader();
+
+		return function createMaterial( m, texturePath, crossOrigin ) {
+
+			// convert from old material format
+
+			var textures = {};
+
+			function loadTexture( path, repeat, offset, wrap, anisotropy ) {
+
+				var fullPath = texturePath + path;
+				var loader = Loader.Handlers.get( fullPath );
+
+				var texture;
+
+				if ( loader !== null ) {
+
+					texture = loader.load( fullPath );
+
+				} else {
+
+					textureLoader.setCrossOrigin( crossOrigin );
+					texture = textureLoader.load( fullPath );
+
+				}
+
+				if ( repeat !== undefined ) {
+
+					texture.repeat.fromArray( repeat );
+
+					if ( repeat[ 0 ] !== 1 ) texture.wrapS = RepeatWrapping;
+					if ( repeat[ 1 ] !== 1 ) texture.wrapT = RepeatWrapping;
+
+				}
+
+				if ( offset !== undefined ) {
+
+					texture.offset.fromArray( offset );
+
+				}
+
+				if ( wrap !== undefined ) {
+
+					if ( wrap[ 0 ] === 'repeat' ) texture.wrapS = RepeatWrapping;
+					if ( wrap[ 0 ] === 'mirror' ) texture.wrapS = MirroredRepeatWrapping;
+
+					if ( wrap[ 1 ] === 'repeat' ) texture.wrapT = RepeatWrapping;
+					if ( wrap[ 1 ] === 'mirror' ) texture.wrapT = MirroredRepeatWrapping;
+
+				}
+
+				if ( anisotropy !== undefined ) {
+
+					texture.anisotropy = anisotropy;
+
+				}
+
+				var uuid = _Math.generateUUID();
+
+				textures[ uuid ] = texture;
+
+				return uuid;
+
+			}
+
+			//
+
+			var json = {
+				uuid: _Math.generateUUID(),
+				type: 'MeshLambertMaterial'
+			};
+
+			for ( var name in m ) {
+
+				var value = m[ name ];
+
+				switch ( name ) {
+
+					case 'DbgColor':
+					case 'DbgIndex':
+					case 'opticalDensity':
+					case 'illumination':
+						break;
+					case 'DbgName':
+						json.name = value;
+						break;
+					case 'blending':
+						json.blending = BlendingMode[ value ];
+						break;
+					case 'colorAmbient':
+					case 'mapAmbient':
+						console.warn( 'THREE.Loader.createMaterial:', name, 'is no longer supported.' );
+						break;
+					case 'colorDiffuse':
+						json.color = color.fromArray( value ).getHex();
+						break;
+					case 'colorSpecular':
+						json.specular = color.fromArray( value ).getHex();
+						break;
+					case 'colorEmissive':
+						json.emissive = color.fromArray( value ).getHex();
+						break;
+					case 'specularCoef':
+						json.shininess = value;
+						break;
+					case 'shading':
+						if ( value.toLowerCase() === 'basic' ) json.type = 'MeshBasicMaterial';
+						if ( value.toLowerCase() === 'phong' ) json.type = 'MeshPhongMaterial';
+						if ( value.toLowerCase() === 'standard' ) json.type = 'MeshStandardMaterial';
+						break;
+					case 'mapDiffuse':
+						json.map = loadTexture( value, m.mapDiffuseRepeat, m.mapDiffuseOffset, m.mapDiffuseWrap, m.mapDiffuseAnisotropy );
+						break;
+					case 'mapDiffuseRepeat':
+					case 'mapDiffuseOffset':
+					case 'mapDiffuseWrap':
+					case 'mapDiffuseAnisotropy':
+						break;
+					case 'mapEmissive':
+						json.emissiveMap = loadTexture( value, m.mapEmissiveRepeat, m.mapEmissiveOffset, m.mapEmissiveWrap, m.mapEmissiveAnisotropy );
+						break;
+					case 'mapEmissiveRepeat':
+					case 'mapEmissiveOffset':
+					case 'mapEmissiveWrap':
+					case 'mapEmissiveAnisotropy':
+						break;
+					case 'mapLight':
+						json.lightMap = loadTexture( value, m.mapLightRepeat, m.mapLightOffset, m.mapLightWrap, m.mapLightAnisotropy );
+						break;
+					case 'mapLightRepeat':
+					case 'mapLightOffset':
+					case 'mapLightWrap':
+					case 'mapLightAnisotropy':
+						break;
+					case 'mapAO':
+						json.aoMap = loadTexture( value, m.mapAORepeat, m.mapAOOffset, m.mapAOWrap, m.mapAOAnisotropy );
+						break;
+					case 'mapAORepeat':
+					case 'mapAOOffset':
+					case 'mapAOWrap':
+					case 'mapAOAnisotropy':
+						break;
+					case 'mapBump':
+						json.bumpMap = loadTexture( value, m.mapBumpRepeat, m.mapBumpOffset, m.mapBumpWrap, m.mapBumpAnisotropy );
+						break;
+					case 'mapBumpScale':
+						json.bumpScale = value;
+						break;
+					case 'mapBumpRepeat':
+					case 'mapBumpOffset':
+					case 'mapBumpWrap':
+					case 'mapBumpAnisotropy':
+						break;
+					case 'mapNormal':
+						json.normalMap = loadTexture( value, m.mapNormalRepeat, m.mapNormalOffset, m.mapNormalWrap, m.mapNormalAnisotropy );
+						break;
+					case 'mapNormalFactor':
+						json.normalScale = value;
+						break;
+					case 'mapNormalRepeat':
+					case 'mapNormalOffset':
+					case 'mapNormalWrap':
+					case 'mapNormalAnisotropy':
+						break;
+					case 'mapSpecular':
+						json.specularMap = loadTexture( value, m.mapSpecularRepeat, m.mapSpecularOffset, m.mapSpecularWrap, m.mapSpecularAnisotropy );
+						break;
+					case 'mapSpecularRepeat':
+					case 'mapSpecularOffset':
+					case 'mapSpecularWrap':
+					case 'mapSpecularAnisotropy':
+						break;
+					case 'mapMetalness':
+						json.metalnessMap = loadTexture( value, m.mapMetalnessRepeat, m.mapMetalnessOffset, m.mapMetalnessWrap, m.mapMetalnessAnisotropy );
+						break;
+					case 'mapMetalnessRepeat':
+					case 'mapMetalnessOffset':
+					case 'mapMetalnessWrap':
+					case 'mapMetalnessAnisotropy':
+						break;
+					case 'mapRoughness':
+						json.roughnessMap = loadTexture( value, m.mapRoughnessRepeat, m.mapRoughnessOffset, m.mapRoughnessWrap, m.mapRoughnessAnisotropy );
+						break;
+					case 'mapRoughnessRepeat':
+					case 'mapRoughnessOffset':
+					case 'mapRoughnessWrap':
+					case 'mapRoughnessAnisotropy':
+						break;
+					case 'mapAlpha':
+						json.alphaMap = loadTexture( value, m.mapAlphaRepeat, m.mapAlphaOffset, m.mapAlphaWrap, m.mapAlphaAnisotropy );
+						break;
+					case 'mapAlphaRepeat':
+					case 'mapAlphaOffset':
+					case 'mapAlphaWrap':
+					case 'mapAlphaAnisotropy':
+						break;
+					case 'flipSided':
+						json.side = BackSide;
+						break;
+					case 'doubleSided':
+						json.side = DoubleSide;
+						break;
+					case 'transparency':
+						console.warn( 'THREE.Loader.createMaterial: transparency has been renamed to opacity' );
+						json.opacity = value;
+						break;
+					case 'depthTest':
+					case 'depthWrite':
+					case 'colorWrite':
+					case 'opacity':
+					case 'reflectivity':
+					case 'transparent':
+					case 'visible':
+					case 'wireframe':
+						json[ name ] = value;
+						break;
+					case 'vertexColors':
+						if ( value === true ) json.vertexColors = VertexColors;
+						if ( value === 'face' ) json.vertexColors = FaceColors;
+						break;
+					default:
+						console.error( 'THREE.Loader.createMaterial: Unsupported', name, value );
+						break;
+
+				}
+
+			}
+
+			if ( json.type === 'MeshBasicMaterial' ) delete json.emissive;
+			if ( json.type !== 'MeshPhongMaterial' ) delete json.specular;
+
+			if ( json.opacity < 1 ) json.transparent = true;
+
+			materialLoader.setTextures( textures );
+
+			return materialLoader.parse( json );
+
+		};
+
+	} )()
+
+} );
+
+/**
+ * @author Don McCurdy / https://www.donmccurdy.com
+ */
+
+var LoaderUtils = {
+
+	decodeText: function ( array ) {
+
+		if ( typeof TextDecoder !== 'undefined' ) {
+
+			return new TextDecoder().decode( array );
+
+		}
+
+		// Avoid the String.fromCharCode.apply(null, array) shortcut, which
+		// throws a "maximum call stack size exceeded" error for large arrays.
+
+		var s = '';
+
+		for ( var i = 0, il = array.length; i < il; i ++ ) {
+
+			// Implicitly assumes little-endian.
+			s += String.fromCharCode( array[ i ] );
+
+		}
+
+		try {
+
+			// merges multi-byte utf-8 characters.
+
+			return decodeURIComponent( escape( s ) );
+
+		} catch ( e ) { // see #16358
+
+			return s;
+
+		}
+
+	},
+
+	extractUrlBase: function ( url ) {
+
+		var index = url.lastIndexOf( '/' );
+
+		if ( index === - 1 ) return './';
+
+		return url.substr( 0, index + 1 );
+
+	}
+
+};
+
+/**
+ * @author mrdoob / http://mrdoob.com/
+ */
+
+var context;
+
+var AudioContext = {
+
+	getContext: function () {
+
+		if ( context === undefined ) {
+
+			context = new ( window.AudioContext || window.webkitAudioContext )();
+
+		}
+
+		return context;
+
+	},
+
+	setContext: function ( value ) {
+
+		context = value;
+
+	}
+
+};
+
+/**
+ * @author Reece Aaron Lecrivain / http://reecenotes.com/
+ */
+
+function AudioLoader( manager ) {
+
+	this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
+
+}
+
+Object.assign( AudioLoader.prototype, {
+
+	load: function ( url, onLoad, onProgress, onError ) {
+
+		var loader = new FileLoader( this.manager );
+		loader.setResponseType( 'arraybuffer' );
+		loader.setPath( this.path );
+		loader.load( url, function ( buffer ) {
+
+			// Create a copy of the buffer. The `decodeAudioData` method
+			// detaches the buffer when complete, preventing reuse.
+			var bufferCopy = buffer.slice( 0 );
+
+			var context = AudioContext.getContext();
+			context.decodeAudioData( bufferCopy, function ( audioBuffer ) {
+
+				onLoad( audioBuffer );
+
+			} );
+
+		}, onProgress, onError );
+
+	},
+
+	setPath: function ( value ) {
+
+		this.path = value;
+		return this;
+
+	}
+
+} );
+
+/**
  * @author zz85 / http://www.lab4games.net/zz85/blog
  * Defines a 2d shape plane using paths.
  **/
@@ -37269,63 +38570,6 @@ Shape.prototype = Object.assign( Object.create( Path.prototype ), {
 		}
 
 		return this;
-
-	}
-
-} );
-
-/**
- * @author mrdoob / http://mrdoob.com/
- * @author alteredq / http://alteredqualia.com/
- */
-
-function Light( color, intensity ) {
-
-	Object3D.call( this );
-
-	this.type = 'Light';
-
-	this.color = new Color( color );
-	this.intensity = intensity !== undefined ? intensity : 1;
-
-	this.receiveShadow = undefined;
-
-}
-
-Light.prototype = Object.assign( Object.create( Object3D.prototype ), {
-
-	constructor: Light,
-
-	isLight: true,
-
-	copy: function ( source ) {
-
-		Object3D.prototype.copy.call( this, source );
-
-		this.color.copy( source.color );
-		this.intensity = source.intensity;
-
-		return this;
-
-	},
-
-	toJSON: function ( meta ) {
-
-		var data = Object3D.prototype.toJSON.call( this, meta );
-
-		data.object.color = this.color.getHex();
-		data.object.intensity = this.intensity;
-
-		if ( this.groundColor !== undefined ) data.object.groundColor = this.groundColor.getHex();
-
-		if ( this.distance !== undefined ) data.object.distance = this.distance;
-		if ( this.angle !== undefined ) data.object.angle = this.angle;
-		if ( this.decay !== undefined ) data.object.decay = this.decay;
-		if ( this.penumbra !== undefined ) data.object.penumbra = this.penumbra;
-
-		if ( this.shadow !== undefined ) data.object.shadow = this.shadow.toJSON();
-
-		return data;
 
 	}
 
@@ -37847,297 +39091,6 @@ RectAreaLight.prototype = Object.assign( Object.create( Light.prototype ), {
 	}
 
 } );
-
-/**
- * @author mrdoob / http://mrdoob.com/
- */
-
-function MaterialLoader( manager ) {
-
-	this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
-	this.textures = {};
-
-}
-
-Object.assign( MaterialLoader.prototype, {
-
-	load: function ( url, onLoad, onProgress, onError ) {
-
-		var scope = this;
-
-		var loader = new FileLoader( scope.manager );
-		loader.setPath( scope.path );
-		loader.load( url, function ( text ) {
-
-			onLoad( scope.parse( JSON.parse( text ) ) );
-
-		}, onProgress, onError );
-
-	},
-
-	parse: function ( json ) {
-
-		var textures = this.textures;
-
-		function getTexture( name ) {
-
-			if ( textures[ name ] === undefined ) {
-
-				console.warn( 'THREE.MaterialLoader: Undefined texture', name );
-
-			}
-
-			return textures[ name ];
-
-		}
-
-		var material = new Materials[ json.type ]();
-
-		if ( json.uuid !== undefined ) material.uuid = json.uuid;
-		if ( json.name !== undefined ) material.name = json.name;
-		if ( json.color !== undefined ) material.color.setHex( json.color );
-		if ( json.roughness !== undefined ) material.roughness = json.roughness;
-		if ( json.metalness !== undefined ) material.metalness = json.metalness;
-		if ( json.emissive !== undefined ) material.emissive.setHex( json.emissive );
-		if ( json.specular !== undefined ) material.specular.setHex( json.specular );
-		if ( json.shininess !== undefined ) material.shininess = json.shininess;
-		if ( json.clearCoat !== undefined ) material.clearCoat = json.clearCoat;
-		if ( json.clearCoatRoughness !== undefined ) material.clearCoatRoughness = json.clearCoatRoughness;
-		if ( json.vertexColors !== undefined ) material.vertexColors = json.vertexColors;
-		if ( json.fog !== undefined ) material.fog = json.fog;
-		if ( json.flatShading !== undefined ) material.flatShading = json.flatShading;
-		if ( json.blending !== undefined ) material.blending = json.blending;
-		if ( json.combine !== undefined ) material.combine = json.combine;
-		if ( json.side !== undefined ) material.side = json.side;
-		if ( json.opacity !== undefined ) material.opacity = json.opacity;
-		if ( json.transparent !== undefined ) material.transparent = json.transparent;
-		if ( json.alphaTest !== undefined ) material.alphaTest = json.alphaTest;
-		if ( json.depthTest !== undefined ) material.depthTest = json.depthTest;
-		if ( json.depthWrite !== undefined ) material.depthWrite = json.depthWrite;
-		if ( json.colorWrite !== undefined ) material.colorWrite = json.colorWrite;
-		if ( json.wireframe !== undefined ) material.wireframe = json.wireframe;
-		if ( json.wireframeLinewidth !== undefined ) material.wireframeLinewidth = json.wireframeLinewidth;
-		if ( json.wireframeLinecap !== undefined ) material.wireframeLinecap = json.wireframeLinecap;
-		if ( json.wireframeLinejoin !== undefined ) material.wireframeLinejoin = json.wireframeLinejoin;
-
-		if ( json.rotation !== undefined ) material.rotation = json.rotation;
-
-		if ( json.linewidth !== 1 ) material.linewidth = json.linewidth;
-		if ( json.dashSize !== undefined ) material.dashSize = json.dashSize;
-		if ( json.gapSize !== undefined ) material.gapSize = json.gapSize;
-		if ( json.scale !== undefined ) material.scale = json.scale;
-
-		if ( json.polygonOffset !== undefined ) material.polygonOffset = json.polygonOffset;
-		if ( json.polygonOffsetFactor !== undefined ) material.polygonOffsetFactor = json.polygonOffsetFactor;
-		if ( json.polygonOffsetUnits !== undefined ) material.polygonOffsetUnits = json.polygonOffsetUnits;
-
-		if ( json.skinning !== undefined ) material.skinning = json.skinning;
-		if ( json.morphTargets !== undefined ) material.morphTargets = json.morphTargets;
-		if ( json.dithering !== undefined ) material.dithering = json.dithering;
-
-		if ( json.visible !== undefined ) material.visible = json.visible;
-		if ( json.userData !== undefined ) material.userData = json.userData;
-
-		// Shader Material
-
-		if ( json.uniforms !== undefined ) {
-
-			for ( var name in json.uniforms ) {
-
-				var uniform = json.uniforms[ name ];
-
-				material.uniforms[ name ] = {};
-
-				switch ( uniform.type ) {
-
-					case 't':
-						material.uniforms[ name ].value = getTexture( uniform.value );
-						break;
-
-					case 'c':
-						material.uniforms[ name ].value = new Color().setHex( uniform.value );
-						break;
-
-					case 'v2':
-						material.uniforms[ name ].value = new Vector2().fromArray( uniform.value );
-						break;
-
-					case 'v3':
-						material.uniforms[ name ].value = new Vector3().fromArray( uniform.value );
-						break;
-
-					case 'v4':
-						material.uniforms[ name ].value = new Vector4().fromArray( uniform.value );
-						break;
-
-					case 'm3':
-						material.uniforms[ name ].value = new Matrix3().fromArray( uniform.value );
-
-					case 'm4':
-						material.uniforms[ name ].value = new Matrix4().fromArray( uniform.value );
-						break;
-
-					default:
-						material.uniforms[ name ].value = uniform.value;
-
-				}
-
-			}
-
-		}
-
-		if ( json.defines !== undefined ) material.defines = json.defines;
-		if ( json.vertexShader !== undefined ) material.vertexShader = json.vertexShader;
-		if ( json.fragmentShader !== undefined ) material.fragmentShader = json.fragmentShader;
-
-		if ( json.extensions !== undefined ) {
-
-			for ( var key in json.extensions ) {
-
-				material.extensions[ key ] = json.extensions[ key ];
-
-			}
-
-		}
-
-		// Deprecated
-
-		if ( json.shading !== undefined ) material.flatShading = json.shading === 1; // THREE.FlatShading
-
-		// for PointsMaterial
-
-		if ( json.size !== undefined ) material.size = json.size;
-		if ( json.sizeAttenuation !== undefined ) material.sizeAttenuation = json.sizeAttenuation;
-
-		// maps
-
-		if ( json.map !== undefined ) material.map = getTexture( json.map );
-		if ( json.matcap !== undefined ) material.matcap = getTexture( json.matcap );
-
-		if ( json.alphaMap !== undefined ) {
-
-			material.alphaMap = getTexture( json.alphaMap );
-			material.transparent = true;
-
-		}
-
-		if ( json.bumpMap !== undefined ) material.bumpMap = getTexture( json.bumpMap );
-		if ( json.bumpScale !== undefined ) material.bumpScale = json.bumpScale;
-
-		if ( json.normalMap !== undefined ) material.normalMap = getTexture( json.normalMap );
-		if ( json.normalMapType !== undefined ) material.normalMapType = json.normalMapType;
-		if ( json.normalScale !== undefined ) {
-
-			var normalScale = json.normalScale;
-
-			if ( Array.isArray( normalScale ) === false ) {
-
-				// Blender exporter used to export a scalar. See #7459
-
-				normalScale = [ normalScale, normalScale ];
-
-			}
-
-			material.normalScale = new Vector2().fromArray( normalScale );
-
-		}
-
-		if ( json.displacementMap !== undefined ) material.displacementMap = getTexture( json.displacementMap );
-		if ( json.displacementScale !== undefined ) material.displacementScale = json.displacementScale;
-		if ( json.displacementBias !== undefined ) material.displacementBias = json.displacementBias;
-
-		if ( json.roughnessMap !== undefined ) material.roughnessMap = getTexture( json.roughnessMap );
-		if ( json.metalnessMap !== undefined ) material.metalnessMap = getTexture( json.metalnessMap );
-
-		if ( json.emissiveMap !== undefined ) material.emissiveMap = getTexture( json.emissiveMap );
-		if ( json.emissiveIntensity !== undefined ) material.emissiveIntensity = json.emissiveIntensity;
-
-		if ( json.specularMap !== undefined ) material.specularMap = getTexture( json.specularMap );
-
-		if ( json.envMap !== undefined ) material.envMap = getTexture( json.envMap );
-		if ( json.envMapIntensity !== undefined ) material.envMapIntensity = json.envMapIntensity;
-
-		if ( json.reflectivity !== undefined ) material.reflectivity = json.reflectivity;
-
-		if ( json.lightMap !== undefined ) material.lightMap = getTexture( json.lightMap );
-		if ( json.lightMapIntensity !== undefined ) material.lightMapIntensity = json.lightMapIntensity;
-
-		if ( json.aoMap !== undefined ) material.aoMap = getTexture( json.aoMap );
-		if ( json.aoMapIntensity !== undefined ) material.aoMapIntensity = json.aoMapIntensity;
-
-		if ( json.gradientMap !== undefined ) material.gradientMap = getTexture( json.gradientMap );
-
-		return material;
-
-	},
-
-	setPath: function ( value ) {
-
-		this.path = value;
-		return this;
-
-	},
-
-	setTextures: function ( value ) {
-
-		this.textures = value;
-		return this;
-
-	}
-
-} );
-
-/**
- * @author Don McCurdy / https://www.donmccurdy.com
- */
-
-var LoaderUtils = {
-
-	decodeText: function ( array ) {
-
-		if ( typeof TextDecoder !== 'undefined' ) {
-
-			return new TextDecoder().decode( array );
-
-		}
-
-		// Avoid the String.fromCharCode.apply(null, array) shortcut, which
-		// throws a "maximum call stack size exceeded" error for large arrays.
-
-		var s = '';
-
-		for ( var i = 0, il = array.length; i < il; i ++ ) {
-
-			// Implicitly assumes little-endian.
-			s += String.fromCharCode( array[ i ] );
-
-		}
-
-		try {
-
-			// merges multi-byte utf-8 characters.
-
-			return decodeURIComponent( escape( s ) );
-
-		} catch ( e ) { // see #16358
-
-			return s;
-
-		}
-
-	},
-
-	extractUrlBase: function ( url ) {
-
-		var index = url.lastIndexOf( '/' );
-
-		if ( index === - 1 ) return './';
-
-		return url.substr( 0, index + 1 );
-
-	}
-
-};
 
 /**
  * @author benaadams / https://twitter.com/ben_a_adams
@@ -39345,6 +40298,2553 @@ var TEXTURE_FILTER = {
 };
 
 /**
+ * @author bhouston / http://clara.io
+ */
+
+function Box2( min, max ) {
+
+	this.min = ( min !== undefined ) ? min : new Vector2( + Infinity, + Infinity );
+	this.max = ( max !== undefined ) ? max : new Vector2( - Infinity, - Infinity );
+
+}
+
+Object.assign( Box2.prototype, {
+
+	set: function ( min, max ) {
+
+		this.min.copy( min );
+		this.max.copy( max );
+
+		return this;
+
+	},
+
+	setFromPoints: function ( points ) {
+
+		this.makeEmpty();
+
+		for ( var i = 0, il = points.length; i < il; i ++ ) {
+
+			this.expandByPoint( points[ i ] );
+
+		}
+
+		return this;
+
+	},
+
+	setFromCenterAndSize: function () {
+
+		var v1 = new Vector2();
+
+		return function setFromCenterAndSize( center, size ) {
+
+			var halfSize = v1.copy( size ).multiplyScalar( 0.5 );
+			this.min.copy( center ).sub( halfSize );
+			this.max.copy( center ).add( halfSize );
+
+			return this;
+
+		};
+
+	}(),
+
+	clone: function () {
+
+		return new this.constructor().copy( this );
+
+	},
+
+	copy: function ( box ) {
+
+		this.min.copy( box.min );
+		this.max.copy( box.max );
+
+		return this;
+
+	},
+
+	makeEmpty: function () {
+
+		this.min.x = this.min.y = + Infinity;
+		this.max.x = this.max.y = - Infinity;
+
+		return this;
+
+	},
+
+	isEmpty: function () {
+
+		// this is a more robust check for empty than ( volume <= 0 ) because volume can get positive with two negative axes
+
+		return ( this.max.x < this.min.x ) || ( this.max.y < this.min.y );
+
+	},
+
+	getCenter: function ( target ) {
+
+		if ( target === undefined ) {
+
+			console.warn( 'THREE.Box2: .getCenter() target is now required' );
+			target = new Vector2();
+
+		}
+
+		return this.isEmpty() ? target.set( 0, 0 ) : target.addVectors( this.min, this.max ).multiplyScalar( 0.5 );
+
+	},
+
+	getSize: function ( target ) {
+
+		if ( target === undefined ) {
+
+			console.warn( 'THREE.Box2: .getSize() target is now required' );
+			target = new Vector2();
+
+		}
+
+		return this.isEmpty() ? target.set( 0, 0 ) : target.subVectors( this.max, this.min );
+
+	},
+
+	expandByPoint: function ( point ) {
+
+		this.min.min( point );
+		this.max.max( point );
+
+		return this;
+
+	},
+
+	expandByVector: function ( vector ) {
+
+		this.min.sub( vector );
+		this.max.add( vector );
+
+		return this;
+
+	},
+
+	expandByScalar: function ( scalar ) {
+
+		this.min.addScalar( - scalar );
+		this.max.addScalar( scalar );
+
+		return this;
+
+	},
+
+	containsPoint: function ( point ) {
+
+		return point.x < this.min.x || point.x > this.max.x ||
+			point.y < this.min.y || point.y > this.max.y ? false : true;
+
+	},
+
+	containsBox: function ( box ) {
+
+		return this.min.x <= box.min.x && box.max.x <= this.max.x &&
+			this.min.y <= box.min.y && box.max.y <= this.max.y;
+
+	},
+
+	getParameter: function ( point, target ) {
+
+		// This can potentially have a divide by zero if the box
+		// has a size dimension of 0.
+
+		if ( target === undefined ) {
+
+			console.warn( 'THREE.Box2: .getParameter() target is now required' );
+			target = new Vector2();
+
+		}
+
+		return target.set(
+			( point.x - this.min.x ) / ( this.max.x - this.min.x ),
+			( point.y - this.min.y ) / ( this.max.y - this.min.y )
+		);
+
+	},
+
+	intersectsBox: function ( box ) {
+
+		// using 4 splitting planes to rule out intersections
+
+		return box.max.x < this.min.x || box.min.x > this.max.x ||
+			box.max.y < this.min.y || box.min.y > this.max.y ? false : true;
+
+	},
+
+	clampPoint: function ( point, target ) {
+
+		if ( target === undefined ) {
+
+			console.warn( 'THREE.Box2: .clampPoint() target is now required' );
+			target = new Vector2();
+
+		}
+
+		return target.copy( point ).clamp( this.min, this.max );
+
+	},
+
+	distanceToPoint: function () {
+
+		var v1 = new Vector2();
+
+		return function distanceToPoint( point ) {
+
+			var clampedPoint = v1.copy( point ).clamp( this.min, this.max );
+			return clampedPoint.sub( point ).length();
+
+		};
+
+	}(),
+
+	intersect: function ( box ) {
+
+		this.min.max( box.min );
+		this.max.min( box.max );
+
+		return this;
+
+	},
+
+	union: function ( box ) {
+
+		this.min.min( box.min );
+		this.max.max( box.max );
+
+		return this;
+
+	},
+
+	translate: function ( offset ) {
+
+		this.min.add( offset );
+		this.max.add( offset );
+
+		return this;
+
+	},
+
+	equals: function ( box ) {
+
+		return box.min.equals( this.min ) && box.max.equals( this.max );
+
+	}
+
+} );
+
+/**
+ * @author bhouston / http://clara.io
+ */
+
+function Line3( start, end ) {
+
+	this.start = ( start !== undefined ) ? start : new Vector3();
+	this.end = ( end !== undefined ) ? end : new Vector3();
+
+}
+
+Object.assign( Line3.prototype, {
+
+	set: function ( start, end ) {
+
+		this.start.copy( start );
+		this.end.copy( end );
+
+		return this;
+
+	},
+
+	clone: function () {
+
+		return new this.constructor().copy( this );
+
+	},
+
+	copy: function ( line ) {
+
+		this.start.copy( line.start );
+		this.end.copy( line.end );
+
+		return this;
+
+	},
+
+	getCenter: function ( target ) {
+
+		if ( target === undefined ) {
+
+			console.warn( 'THREE.Line3: .getCenter() target is now required' );
+			target = new Vector3();
+
+		}
+
+		return target.addVectors( this.start, this.end ).multiplyScalar( 0.5 );
+
+	},
+
+	delta: function ( target ) {
+
+		if ( target === undefined ) {
+
+			console.warn( 'THREE.Line3: .delta() target is now required' );
+			target = new Vector3();
+
+		}
+
+		return target.subVectors( this.end, this.start );
+
+	},
+
+	distanceSq: function () {
+
+		return this.start.distanceToSquared( this.end );
+
+	},
+
+	distance: function () {
+
+		return this.start.distanceTo( this.end );
+
+	},
+
+	at: function ( t, target ) {
+
+		if ( target === undefined ) {
+
+			console.warn( 'THREE.Line3: .at() target is now required' );
+			target = new Vector3();
+
+		}
+
+		return this.delta( target ).multiplyScalar( t ).add( this.start );
+
+	},
+
+	closestPointToPointParameter: function () {
+
+		var startP = new Vector3();
+		var startEnd = new Vector3();
+
+		return function closestPointToPointParameter( point, clampToLine ) {
+
+			startP.subVectors( point, this.start );
+			startEnd.subVectors( this.end, this.start );
+
+			var startEnd2 = startEnd.dot( startEnd );
+			var startEnd_startP = startEnd.dot( startP );
+
+			var t = startEnd_startP / startEnd2;
+
+			if ( clampToLine ) {
+
+				t = _Math.clamp( t, 0, 1 );
+
+			}
+
+			return t;
+
+		};
+
+	}(),
+
+	closestPointToPoint: function ( point, clampToLine, target ) {
+
+		var t = this.closestPointToPointParameter( point, clampToLine );
+
+		if ( target === undefined ) {
+
+			console.warn( 'THREE.Line3: .closestPointToPoint() target is now required' );
+			target = new Vector3();
+
+		}
+
+		return this.delta( target ).multiplyScalar( t ).add( this.start );
+
+	},
+
+	applyMatrix4: function ( matrix ) {
+
+		this.start.applyMatrix4( matrix );
+		this.end.applyMatrix4( matrix );
+
+		return this;
+
+	},
+
+	equals: function ( line ) {
+
+		return line.start.equals( this.start ) && line.end.equals( this.end );
+
+	}
+
+} );
+
+/**
+ * Camera for rendering cube maps
+ *	- renders scene into axis-aligned cube
+ *
+ * @author alteredq / http://alteredqualia.com/
+ */
+
+var fov = 90, aspect = 1;
+
+function CubeCamera( near, far, cubeResolution, options ) {
+
+	Object3D.call( this );
+
+	this.type = 'CubeCamera';
+
+	var cameraPX = new PerspectiveCamera( fov, aspect, near, far );
+	cameraPX.up.set( 0, - 1, 0 );
+	cameraPX.lookAt( new Vector3( 1, 0, 0 ) );
+	this.add( cameraPX );
+
+	var cameraNX = new PerspectiveCamera( fov, aspect, near, far );
+	cameraNX.up.set( 0, - 1, 0 );
+	cameraNX.lookAt( new Vector3( - 1, 0, 0 ) );
+	this.add( cameraNX );
+
+	var cameraPY = new PerspectiveCamera( fov, aspect, near, far );
+	cameraPY.up.set( 0, 0, 1 );
+	cameraPY.lookAt( new Vector3( 0, 1, 0 ) );
+	this.add( cameraPY );
+
+	var cameraNY = new PerspectiveCamera( fov, aspect, near, far );
+	cameraNY.up.set( 0, 0, - 1 );
+	cameraNY.lookAt( new Vector3( 0, - 1, 0 ) );
+	this.add( cameraNY );
+
+	var cameraPZ = new PerspectiveCamera( fov, aspect, near, far );
+	cameraPZ.up.set( 0, - 1, 0 );
+	cameraPZ.lookAt( new Vector3( 0, 0, 1 ) );
+	this.add( cameraPZ );
+
+	var cameraNZ = new PerspectiveCamera( fov, aspect, near, far );
+	cameraNZ.up.set( 0, - 1, 0 );
+	cameraNZ.lookAt( new Vector3( 0, 0, - 1 ) );
+	this.add( cameraNZ );
+
+	options = options || { format: RGBFormat, magFilter: LinearFilter, minFilter: LinearFilter };
+
+	this.renderTarget = new WebGLRenderTargetCube( cubeResolution, cubeResolution, options );
+	this.renderTarget.texture.name = "CubeCamera";
+
+	this.update = function ( renderer, scene ) {
+
+		if ( this.parent === null ) this.updateMatrixWorld();
+
+		var currentRenderTarget = renderer.getRenderTarget();
+
+		var renderTarget = this.renderTarget;
+		var generateMipmaps = renderTarget.texture.generateMipmaps;
+
+		renderTarget.texture.generateMipmaps = false;
+
+		renderer.setRenderTarget( renderTarget, 0 );
+		renderer.render( scene, cameraPX );
+
+		renderer.setRenderTarget( renderTarget, 1 );
+		renderer.render( scene, cameraNX );
+
+		renderer.setRenderTarget( renderTarget, 2 );
+		renderer.render( scene, cameraPY );
+
+		renderer.setRenderTarget( renderTarget, 3 );
+		renderer.render( scene, cameraNY );
+
+		renderer.setRenderTarget( renderTarget, 4 );
+		renderer.render( scene, cameraPZ );
+
+		renderTarget.texture.generateMipmaps = generateMipmaps;
+
+		renderer.setRenderTarget( renderTarget, 5 );
+		renderer.render( scene, cameraNZ );
+
+		renderer.setRenderTarget( currentRenderTarget );
+
+	};
+
+	this.clear = function ( renderer, color, depth, stencil ) {
+
+		var currentRenderTarget = renderer.getRenderTarget();
+
+		var renderTarget = this.renderTarget;
+
+		for ( var i = 0; i < 6; i ++ ) {
+
+			renderer.setRenderTarget( renderTarget, i );
+
+			renderer.clear( color, depth, stencil );
+
+		}
+
+		renderer.setRenderTarget( currentRenderTarget );
+
+	};
+
+}
+
+CubeCamera.prototype = Object.create( Object3D.prototype );
+CubeCamera.prototype.constructor = CubeCamera;
+
+/**
+ * @author mrdoob / http://mrdoob.com/
+ */
+
+function Face4( a, b, c, d, normal, color, materialIndex ) {
+
+	console.warn( 'THREE.Face4 has been removed. A THREE.Face3 will be created instead.' );
+	return new Face3( a, b, c, normal, color, materialIndex );
+
+}
+
+var LineStrip = 0;
+
+var LinePieces = 1;
+
+function MeshFaceMaterial( materials ) {
+
+	console.warn( 'THREE.MeshFaceMaterial has been removed. Use an Array instead.' );
+	return materials;
+
+}
+
+function MultiMaterial( materials ) {
+
+	if ( materials === undefined ) materials = [];
+
+	console.warn( 'THREE.MultiMaterial has been removed. Use an Array instead.' );
+	materials.isMultiMaterial = true;
+	materials.materials = materials;
+	materials.clone = function () {
+
+		return materials.slice();
+
+	};
+	return materials;
+
+}
+
+function PointCloud( geometry, material ) {
+
+	console.warn( 'THREE.PointCloud has been renamed to THREE.Points.' );
+	return new Points( geometry, material );
+
+}
+
+function Particle( material ) {
+
+	console.warn( 'THREE.Particle has been renamed to THREE.Sprite.' );
+	return new Sprite( material );
+
+}
+
+function ParticleSystem( geometry, material ) {
+
+	console.warn( 'THREE.ParticleSystem has been renamed to THREE.Points.' );
+	return new Points( geometry, material );
+
+}
+
+function PointCloudMaterial( parameters ) {
+
+	console.warn( 'THREE.PointCloudMaterial has been renamed to THREE.PointsMaterial.' );
+	return new PointsMaterial( parameters );
+
+}
+
+function ParticleBasicMaterial( parameters ) {
+
+	console.warn( 'THREE.ParticleBasicMaterial has been renamed to THREE.PointsMaterial.' );
+	return new PointsMaterial( parameters );
+
+}
+
+function ParticleSystemMaterial( parameters ) {
+
+	console.warn( 'THREE.ParticleSystemMaterial has been renamed to THREE.PointsMaterial.' );
+	return new PointsMaterial( parameters );
+
+}
+
+function Vertex( x, y, z ) {
+
+	console.warn( 'THREE.Vertex has been removed. Use THREE.Vector3 instead.' );
+	return new Vector3( x, y, z );
+
+}
+
+//
+
+function DynamicBufferAttribute( array, itemSize ) {
+
+	console.warn( 'THREE.DynamicBufferAttribute has been removed. Use new THREE.BufferAttribute().setDynamic( true ) instead.' );
+	return new BufferAttribute( array, itemSize ).setDynamic( true );
+
+}
+
+function Int8Attribute( array, itemSize ) {
+
+	console.warn( 'THREE.Int8Attribute has been removed. Use new THREE.Int8BufferAttribute() instead.' );
+	return new Int8BufferAttribute( array, itemSize );
+
+}
+
+function Uint8Attribute( array, itemSize ) {
+
+	console.warn( 'THREE.Uint8Attribute has been removed. Use new THREE.Uint8BufferAttribute() instead.' );
+	return new Uint8BufferAttribute( array, itemSize );
+
+}
+
+function Uint8ClampedAttribute( array, itemSize ) {
+
+	console.warn( 'THREE.Uint8ClampedAttribute has been removed. Use new THREE.Uint8ClampedBufferAttribute() instead.' );
+	return new Uint8ClampedBufferAttribute( array, itemSize );
+
+}
+
+function Int16Attribute( array, itemSize ) {
+
+	console.warn( 'THREE.Int16Attribute has been removed. Use new THREE.Int16BufferAttribute() instead.' );
+	return new Int16BufferAttribute( array, itemSize );
+
+}
+
+function Uint16Attribute( array, itemSize ) {
+
+	console.warn( 'THREE.Uint16Attribute has been removed. Use new THREE.Uint16BufferAttribute() instead.' );
+	return new Uint16BufferAttribute( array, itemSize );
+
+}
+
+function Int32Attribute( array, itemSize ) {
+
+	console.warn( 'THREE.Int32Attribute has been removed. Use new THREE.Int32BufferAttribute() instead.' );
+	return new Int32BufferAttribute( array, itemSize );
+
+}
+
+function Uint32Attribute( array, itemSize ) {
+
+	console.warn( 'THREE.Uint32Attribute has been removed. Use new THREE.Uint32BufferAttribute() instead.' );
+	return new Uint32BufferAttribute( array, itemSize );
+
+}
+
+function Float32Attribute( array, itemSize ) {
+
+	console.warn( 'THREE.Float32Attribute has been removed. Use new THREE.Float32BufferAttribute() instead.' );
+	return new Float32BufferAttribute( array, itemSize );
+
+}
+
+function Float64Attribute( array, itemSize ) {
+
+	console.warn( 'THREE.Float64Attribute has been removed. Use new THREE.Float64BufferAttribute() instead.' );
+	return new Float64BufferAttribute( array, itemSize );
+
+}
+
+//
+
+Curve.create = function ( construct, getPoint ) {
+
+	console.log( 'THREE.Curve.create() has been deprecated' );
+
+	construct.prototype = Object.create( Curve.prototype );
+	construct.prototype.constructor = construct;
+	construct.prototype.getPoint = getPoint;
+
+	return construct;
+
+};
+
+//
+
+Object.assign( CurvePath.prototype, {
+
+	createPointsGeometry: function ( divisions ) {
+
+		console.warn( 'THREE.CurvePath: .createPointsGeometry() has been removed. Use new THREE.Geometry().setFromPoints( points ) instead.' );
+
+		// generate geometry from path points (for Line or Points objects)
+
+		var pts = this.getPoints( divisions );
+		return this.createGeometry( pts );
+
+	},
+
+	createSpacedPointsGeometry: function ( divisions ) {
+
+		console.warn( 'THREE.CurvePath: .createSpacedPointsGeometry() has been removed. Use new THREE.Geometry().setFromPoints( points ) instead.' );
+
+		// generate geometry from equidistant sampling along the path
+
+		var pts = this.getSpacedPoints( divisions );
+		return this.createGeometry( pts );
+
+	},
+
+	createGeometry: function ( points ) {
+
+		console.warn( 'THREE.CurvePath: .createGeometry() has been removed. Use new THREE.Geometry().setFromPoints( points ) instead.' );
+
+		var geometry = new Geometry();
+
+		for ( var i = 0, l = points.length; i < l; i ++ ) {
+
+			var point = points[ i ];
+			geometry.vertices.push( new Vector3( point.x, point.y, point.z || 0 ) );
+
+		}
+
+		return geometry;
+
+	}
+
+} );
+
+//
+
+Object.assign( Path.prototype, {
+
+	fromPoints: function ( points ) {
+
+		console.warn( 'THREE.Path: .fromPoints() has been renamed to .setFromPoints().' );
+		this.setFromPoints( points );
+
+	}
+
+} );
+
+//
+
+function ClosedSplineCurve3( points ) {
+
+	console.warn( 'THREE.ClosedSplineCurve3 has been deprecated. Use THREE.CatmullRomCurve3 instead.' );
+
+	CatmullRomCurve3.call( this, points );
+	this.type = 'catmullrom';
+	this.closed = true;
+
+}
+
+ClosedSplineCurve3.prototype = Object.create( CatmullRomCurve3.prototype );
+
+//
+
+function SplineCurve3( points ) {
+
+	console.warn( 'THREE.SplineCurve3 has been deprecated. Use THREE.CatmullRomCurve3 instead.' );
+
+	CatmullRomCurve3.call( this, points );
+	this.type = 'catmullrom';
+
+}
+
+SplineCurve3.prototype = Object.create( CatmullRomCurve3.prototype );
+
+//
+
+function Spline( points ) {
+
+	console.warn( 'THREE.Spline has been removed. Use THREE.CatmullRomCurve3 instead.' );
+
+	CatmullRomCurve3.call( this, points );
+	this.type = 'catmullrom';
+
+}
+
+Spline.prototype = Object.create( CatmullRomCurve3.prototype );
+
+Object.assign( Spline.prototype, {
+
+	initFromArray: function ( /* a */ ) {
+
+		console.error( 'THREE.Spline: .initFromArray() has been removed.' );
+
+	},
+	getControlPointsArray: function ( /* optionalTarget */ ) {
+
+		console.error( 'THREE.Spline: .getControlPointsArray() has been removed.' );
+
+	},
+	reparametrizeByArcLength: function ( /* samplingCoef */ ) {
+
+		console.error( 'THREE.Spline: .reparametrizeByArcLength() has been removed.' );
+
+	}
+
+} );
+
+//
+
+function AxisHelper( size ) {
+
+	console.warn( 'THREE.AxisHelper has been renamed to THREE.AxesHelper.' );
+	return new AxesHelper( size );
+
+}
+
+function BoundingBoxHelper( object, color ) {
+
+	console.warn( 'THREE.BoundingBoxHelper has been deprecated. Creating a THREE.BoxHelper instead.' );
+	return new BoxHelper( object, color );
+
+}
+
+function EdgesHelper( object, hex ) {
+
+	console.warn( 'THREE.EdgesHelper has been removed. Use THREE.EdgesGeometry instead.' );
+	return new LineSegments( new EdgesGeometry( object.geometry ), new LineBasicMaterial( { color: hex !== undefined ? hex : 0xffffff } ) );
+
+}
+
+GridHelper.prototype.setColors = function () {
+
+	console.error( 'THREE.GridHelper: setColors() has been deprecated, pass them in the constructor instead.' );
+
+};
+
+SkeletonHelper.prototype.update = function () {
+
+	console.error( 'THREE.SkeletonHelper: update() no longer needs to be called.' );
+
+};
+
+function WireframeHelper( object, hex ) {
+
+	console.warn( 'THREE.WireframeHelper has been removed. Use THREE.WireframeGeometry instead.' );
+	return new LineSegments( new WireframeGeometry( object.geometry ), new LineBasicMaterial( { color: hex !== undefined ? hex : 0xffffff } ) );
+
+}
+
+//
+
+Object.assign( Loader.prototype, {
+
+	extractUrlBase: function ( url ) {
+
+		console.warn( 'THREE.Loader: .extractUrlBase() has been deprecated. Use THREE.LoaderUtils.extractUrlBase() instead.' );
+		return LoaderUtils.extractUrlBase( url );
+
+	}
+
+} );
+
+function XHRLoader( manager ) {
+
+	// console.warn( 'THREE.XHRLoader has been renamed to THREE.FileLoader.' );
+	return new FileLoader( manager );
+
+}
+
+function BinaryTextureLoader( manager ) {
+
+	console.warn( 'THREE.BinaryTextureLoader has been renamed to THREE.DataTextureLoader.' );
+	return new DataTextureLoader( manager );
+
+}
+
+Object.assign( ObjectLoader.prototype, {
+
+	setTexturePath: function ( value ) {
+
+		console.warn( 'THREE.ObjectLoader: .setTexturePath() has been renamed to .setResourcePath().' );
+		return this.setResourcePath( value );
+
+	}
+
+} );
+
+//
+
+Object.assign( Box2.prototype, {
+
+	center: function ( optionalTarget ) {
+
+		console.warn( 'THREE.Box2: .center() has been renamed to .getCenter().' );
+		return this.getCenter( optionalTarget );
+
+	},
+	empty: function () {
+
+		console.warn( 'THREE.Box2: .empty() has been renamed to .isEmpty().' );
+		return this.isEmpty();
+
+	},
+	isIntersectionBox: function ( box ) {
+
+		console.warn( 'THREE.Box2: .isIntersectionBox() has been renamed to .intersectsBox().' );
+		return this.intersectsBox( box );
+
+	},
+	size: function ( optionalTarget ) {
+
+		console.warn( 'THREE.Box2: .size() has been renamed to .getSize().' );
+		return this.getSize( optionalTarget );
+
+	}
+} );
+
+Object.assign( Box3.prototype, {
+
+	center: function ( optionalTarget ) {
+
+		console.warn( 'THREE.Box3: .center() has been renamed to .getCenter().' );
+		return this.getCenter( optionalTarget );
+
+	},
+	empty: function () {
+
+		console.warn( 'THREE.Box3: .empty() has been renamed to .isEmpty().' );
+		return this.isEmpty();
+
+	},
+	isIntersectionBox: function ( box ) {
+
+		console.warn( 'THREE.Box3: .isIntersectionBox() has been renamed to .intersectsBox().' );
+		return this.intersectsBox( box );
+
+	},
+	isIntersectionSphere: function ( sphere ) {
+
+		console.warn( 'THREE.Box3: .isIntersectionSphere() has been renamed to .intersectsSphere().' );
+		return this.intersectsSphere( sphere );
+
+	},
+	size: function ( optionalTarget ) {
+
+		console.warn( 'THREE.Box3: .size() has been renamed to .getSize().' );
+		return this.getSize( optionalTarget );
+
+	}
+} );
+
+Line3.prototype.center = function ( optionalTarget ) {
+
+	console.warn( 'THREE.Line3: .center() has been renamed to .getCenter().' );
+	return this.getCenter( optionalTarget );
+
+};
+
+Object.assign( _Math, {
+
+	random16: function () {
+
+		console.warn( 'THREE.Math: .random16() has been deprecated. Use Math.random() instead.' );
+		return Math.random();
+
+	},
+
+	nearestPowerOfTwo: function ( value ) {
+
+		console.warn( 'THREE.Math: .nearestPowerOfTwo() has been renamed to .floorPowerOfTwo().' );
+		return _Math.floorPowerOfTwo( value );
+
+	},
+
+	nextPowerOfTwo: function ( value ) {
+
+		console.warn( 'THREE.Math: .nextPowerOfTwo() has been renamed to .ceilPowerOfTwo().' );
+		return _Math.ceilPowerOfTwo( value );
+
+	}
+
+} );
+
+Object.assign( Matrix3.prototype, {
+
+	flattenToArrayOffset: function ( array, offset ) {
+
+		console.warn( "THREE.Matrix3: .flattenToArrayOffset() has been deprecated. Use .toArray() instead." );
+		return this.toArray( array, offset );
+
+	},
+	multiplyVector3: function ( vector ) {
+
+		console.warn( 'THREE.Matrix3: .multiplyVector3() has been removed. Use vector.applyMatrix3( matrix ) instead.' );
+		return vector.applyMatrix3( this );
+
+	},
+	multiplyVector3Array: function ( /* a */ ) {
+
+		console.error( 'THREE.Matrix3: .multiplyVector3Array() has been removed.' );
+
+	},
+	applyToBuffer: function ( buffer /*, offset, length */ ) {
+
+		console.warn( 'THREE.Matrix3: .applyToBuffer() has been removed. Use matrix.applyToBufferAttribute( attribute ) instead.' );
+		return this.applyToBufferAttribute( buffer );
+
+	},
+	applyToVector3Array: function ( /* array, offset, length */ ) {
+
+		console.error( 'THREE.Matrix3: .applyToVector3Array() has been removed.' );
+
+	}
+
+} );
+
+Object.assign( Matrix4.prototype, {
+
+	extractPosition: function ( m ) {
+
+		console.warn( 'THREE.Matrix4: .extractPosition() has been renamed to .copyPosition().' );
+		return this.copyPosition( m );
+
+	},
+	flattenToArrayOffset: function ( array, offset ) {
+
+		console.warn( "THREE.Matrix4: .flattenToArrayOffset() has been deprecated. Use .toArray() instead." );
+		return this.toArray( array, offset );
+
+	},
+	getPosition: function () {
+
+		var v1;
+
+		return function getPosition() {
+
+			if ( v1 === undefined ) v1 = new Vector3();
+			console.warn( 'THREE.Matrix4: .getPosition() has been removed. Use Vector3.setFromMatrixPosition( matrix ) instead.' );
+			return v1.setFromMatrixColumn( this, 3 );
+
+		};
+
+	}(),
+	setRotationFromQuaternion: function ( q ) {
+
+		console.warn( 'THREE.Matrix4: .setRotationFromQuaternion() has been renamed to .makeRotationFromQuaternion().' );
+		return this.makeRotationFromQuaternion( q );
+
+	},
+	multiplyToArray: function () {
+
+		console.warn( 'THREE.Matrix4: .multiplyToArray() has been removed.' );
+
+	},
+	multiplyVector3: function ( vector ) {
+
+		console.warn( 'THREE.Matrix4: .multiplyVector3() has been removed. Use vector.applyMatrix4( matrix ) instead.' );
+		return vector.applyMatrix4( this );
+
+	},
+	multiplyVector4: function ( vector ) {
+
+		console.warn( 'THREE.Matrix4: .multiplyVector4() has been removed. Use vector.applyMatrix4( matrix ) instead.' );
+		return vector.applyMatrix4( this );
+
+	},
+	multiplyVector3Array: function ( /* a */ ) {
+
+		console.error( 'THREE.Matrix4: .multiplyVector3Array() has been removed.' );
+
+	},
+	rotateAxis: function ( v ) {
+
+		console.warn( 'THREE.Matrix4: .rotateAxis() has been removed. Use Vector3.transformDirection( matrix ) instead.' );
+		v.transformDirection( this );
+
+	},
+	crossVector: function ( vector ) {
+
+		console.warn( 'THREE.Matrix4: .crossVector() has been removed. Use vector.applyMatrix4( matrix ) instead.' );
+		return vector.applyMatrix4( this );
+
+	},
+	translate: function () {
+
+		console.error( 'THREE.Matrix4: .translate() has been removed.' );
+
+	},
+	rotateX: function () {
+
+		console.error( 'THREE.Matrix4: .rotateX() has been removed.' );
+
+	},
+	rotateY: function () {
+
+		console.error( 'THREE.Matrix4: .rotateY() has been removed.' );
+
+	},
+	rotateZ: function () {
+
+		console.error( 'THREE.Matrix4: .rotateZ() has been removed.' );
+
+	},
+	rotateByAxis: function () {
+
+		console.error( 'THREE.Matrix4: .rotateByAxis() has been removed.' );
+
+	},
+	applyToBuffer: function ( buffer /*, offset, length */ ) {
+
+		console.warn( 'THREE.Matrix4: .applyToBuffer() has been removed. Use matrix.applyToBufferAttribute( attribute ) instead.' );
+		return this.applyToBufferAttribute( buffer );
+
+	},
+	applyToVector3Array: function ( /* array, offset, length */ ) {
+
+		console.error( 'THREE.Matrix4: .applyToVector3Array() has been removed.' );
+
+	},
+	makeFrustum: function ( left, right, bottom, top, near, far ) {
+
+		console.warn( 'THREE.Matrix4: .makeFrustum() has been removed. Use .makePerspective( left, right, top, bottom, near, far ) instead.' );
+		return this.makePerspective( left, right, top, bottom, near, far );
+
+	}
+
+} );
+
+Plane.prototype.isIntersectionLine = function ( line ) {
+
+	console.warn( 'THREE.Plane: .isIntersectionLine() has been renamed to .intersectsLine().' );
+	return this.intersectsLine( line );
+
+};
+
+Quaternion.prototype.multiplyVector3 = function ( vector ) {
+
+	console.warn( 'THREE.Quaternion: .multiplyVector3() has been removed. Use is now vector.applyQuaternion( quaternion ) instead.' );
+	return vector.applyQuaternion( this );
+
+};
+
+Object.assign( Ray.prototype, {
+
+	isIntersectionBox: function ( box ) {
+
+		console.warn( 'THREE.Ray: .isIntersectionBox() has been renamed to .intersectsBox().' );
+		return this.intersectsBox( box );
+
+	},
+	isIntersectionPlane: function ( plane ) {
+
+		console.warn( 'THREE.Ray: .isIntersectionPlane() has been renamed to .intersectsPlane().' );
+		return this.intersectsPlane( plane );
+
+	},
+	isIntersectionSphere: function ( sphere ) {
+
+		console.warn( 'THREE.Ray: .isIntersectionSphere() has been renamed to .intersectsSphere().' );
+		return this.intersectsSphere( sphere );
+
+	}
+
+} );
+
+Object.assign( Triangle.prototype, {
+
+	area: function () {
+
+		console.warn( 'THREE.Triangle: .area() has been renamed to .getArea().' );
+		return this.getArea();
+
+	},
+	barycoordFromPoint: function ( point, target ) {
+
+		console.warn( 'THREE.Triangle: .barycoordFromPoint() has been renamed to .getBarycoord().' );
+		return this.getBarycoord( point, target );
+
+	},
+	midpoint: function ( target ) {
+
+		console.warn( 'THREE.Triangle: .midpoint() has been renamed to .getMidpoint().' );
+		return this.getMidpoint( target );
+
+	},
+	normal: function ( target ) {
+
+		console.warn( 'THREE.Triangle: .normal() has been renamed to .getNormal().' );
+		return this.getNormal( target );
+
+	},
+	plane: function ( target ) {
+
+		console.warn( 'THREE.Triangle: .plane() has been renamed to .getPlane().' );
+		return this.getPlane( target );
+
+	}
+
+} );
+
+Object.assign( Triangle, {
+
+	barycoordFromPoint: function ( point, a, b, c, target ) {
+
+		console.warn( 'THREE.Triangle: .barycoordFromPoint() has been renamed to .getBarycoord().' );
+		return Triangle.getBarycoord( point, a, b, c, target );
+
+	},
+	normal: function ( a, b, c, target ) {
+
+		console.warn( 'THREE.Triangle: .normal() has been renamed to .getNormal().' );
+		return Triangle.getNormal( a, b, c, target );
+
+	}
+
+} );
+
+Object.assign( Shape.prototype, {
+
+	extractAllPoints: function ( divisions ) {
+
+		console.warn( 'THREE.Shape: .extractAllPoints() has been removed. Use .extractPoints() instead.' );
+		return this.extractPoints( divisions );
+
+	},
+	extrude: function ( options ) {
+
+		console.warn( 'THREE.Shape: .extrude() has been removed. Use ExtrudeGeometry() instead.' );
+		return new ExtrudeGeometry( this, options );
+
+	},
+	makeGeometry: function ( options ) {
+
+		console.warn( 'THREE.Shape: .makeGeometry() has been removed. Use ShapeGeometry() instead.' );
+		return new ShapeGeometry( this, options );
+
+	}
+
+} );
+
+Object.assign( Vector2.prototype, {
+
+	fromAttribute: function ( attribute, index, offset ) {
+
+		console.warn( 'THREE.Vector2: .fromAttribute() has been renamed to .fromBufferAttribute().' );
+		return this.fromBufferAttribute( attribute, index, offset );
+
+	},
+	distanceToManhattan: function ( v ) {
+
+		console.warn( 'THREE.Vector2: .distanceToManhattan() has been renamed to .manhattanDistanceTo().' );
+		return this.manhattanDistanceTo( v );
+
+	},
+	lengthManhattan: function () {
+
+		console.warn( 'THREE.Vector2: .lengthManhattan() has been renamed to .manhattanLength().' );
+		return this.manhattanLength();
+
+	}
+
+} );
+
+Object.assign( Vector3.prototype, {
+
+	setEulerFromRotationMatrix: function () {
+
+		console.error( 'THREE.Vector3: .setEulerFromRotationMatrix() has been removed. Use Euler.setFromRotationMatrix() instead.' );
+
+	},
+	setEulerFromQuaternion: function () {
+
+		console.error( 'THREE.Vector3: .setEulerFromQuaternion() has been removed. Use Euler.setFromQuaternion() instead.' );
+
+	},
+	getPositionFromMatrix: function ( m ) {
+
+		console.warn( 'THREE.Vector3: .getPositionFromMatrix() has been renamed to .setFromMatrixPosition().' );
+		return this.setFromMatrixPosition( m );
+
+	},
+	getScaleFromMatrix: function ( m ) {
+
+		console.warn( 'THREE.Vector3: .getScaleFromMatrix() has been renamed to .setFromMatrixScale().' );
+		return this.setFromMatrixScale( m );
+
+	},
+	getColumnFromMatrix: function ( index, matrix ) {
+
+		console.warn( 'THREE.Vector3: .getColumnFromMatrix() has been renamed to .setFromMatrixColumn().' );
+		return this.setFromMatrixColumn( matrix, index );
+
+	},
+	applyProjection: function ( m ) {
+
+		console.warn( 'THREE.Vector3: .applyProjection() has been removed. Use .applyMatrix4( m ) instead.' );
+		return this.applyMatrix4( m );
+
+	},
+	fromAttribute: function ( attribute, index, offset ) {
+
+		console.warn( 'THREE.Vector3: .fromAttribute() has been renamed to .fromBufferAttribute().' );
+		return this.fromBufferAttribute( attribute, index, offset );
+
+	},
+	distanceToManhattan: function ( v ) {
+
+		console.warn( 'THREE.Vector3: .distanceToManhattan() has been renamed to .manhattanDistanceTo().' );
+		return this.manhattanDistanceTo( v );
+
+	},
+	lengthManhattan: function () {
+
+		console.warn( 'THREE.Vector3: .lengthManhattan() has been renamed to .manhattanLength().' );
+		return this.manhattanLength();
+
+	}
+
+} );
+
+Object.assign( Vector4.prototype, {
+
+	fromAttribute: function ( attribute, index, offset ) {
+
+		console.warn( 'THREE.Vector4: .fromAttribute() has been renamed to .fromBufferAttribute().' );
+		return this.fromBufferAttribute( attribute, index, offset );
+
+	},
+	lengthManhattan: function () {
+
+		console.warn( 'THREE.Vector4: .lengthManhattan() has been renamed to .manhattanLength().' );
+		return this.manhattanLength();
+
+	}
+
+} );
+
+//
+
+Object.assign( Geometry.prototype, {
+
+	computeTangents: function () {
+
+		console.error( 'THREE.Geometry: .computeTangents() has been removed.' );
+
+	},
+	computeLineDistances: function () {
+
+		console.error( 'THREE.Geometry: .computeLineDistances() has been removed. Use THREE.Line.computeLineDistances() instead.' );
+
+	}
+
+} );
+
+Object.assign( Object3D.prototype, {
+
+	getChildByName: function ( name ) {
+
+		console.warn( 'THREE.Object3D: .getChildByName() has been renamed to .getObjectByName().' );
+		return this.getObjectByName( name );
+
+	},
+	renderDepth: function () {
+
+		console.warn( 'THREE.Object3D: .renderDepth has been removed. Use .renderOrder, instead.' );
+
+	},
+	translate: function ( distance, axis ) {
+
+		console.warn( 'THREE.Object3D: .translate() has been removed. Use .translateOnAxis( axis, distance ) instead.' );
+		return this.translateOnAxis( axis, distance );
+
+	},
+	getWorldRotation: function () {
+
+		console.error( 'THREE.Object3D: .getWorldRotation() has been removed. Use THREE.Object3D.getWorldQuaternion( target ) instead.' );
+
+	}
+
+} );
+
+Object.defineProperties( Object3D.prototype, {
+
+	eulerOrder: {
+		get: function () {
+
+			console.warn( 'THREE.Object3D: .eulerOrder is now .rotation.order.' );
+			return this.rotation.order;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.Object3D: .eulerOrder is now .rotation.order.' );
+			this.rotation.order = value;
+
+		}
+	},
+	useQuaternion: {
+		get: function () {
+
+			console.warn( 'THREE.Object3D: .useQuaternion has been removed. The library now uses quaternions by default.' );
+
+		},
+		set: function () {
+
+			console.warn( 'THREE.Object3D: .useQuaternion has been removed. The library now uses quaternions by default.' );
+
+		}
+	}
+
+} );
+
+Object.defineProperties( LOD.prototype, {
+
+	objects: {
+		get: function () {
+
+			console.warn( 'THREE.LOD: .objects has been renamed to .levels.' );
+			return this.levels;
+
+		}
+	}
+
+} );
+
+Object.defineProperty( Skeleton.prototype, 'useVertexTexture', {
+
+	get: function () {
+
+		console.warn( 'THREE.Skeleton: useVertexTexture has been removed.' );
+
+	},
+	set: function () {
+
+		console.warn( 'THREE.Skeleton: useVertexTexture has been removed.' );
+
+	}
+
+} );
+
+SkinnedMesh.prototype.initBones = function () {
+
+	console.error( 'THREE.SkinnedMesh: initBones() has been removed.' );
+
+};
+
+Object.defineProperty( Curve.prototype, '__arcLengthDivisions', {
+
+	get: function () {
+
+		console.warn( 'THREE.Curve: .__arcLengthDivisions is now .arcLengthDivisions.' );
+		return this.arcLengthDivisions;
+
+	},
+	set: function ( value ) {
+
+		console.warn( 'THREE.Curve: .__arcLengthDivisions is now .arcLengthDivisions.' );
+		this.arcLengthDivisions = value;
+
+	}
+
+} );
+
+//
+
+PerspectiveCamera.prototype.setLens = function ( focalLength, filmGauge ) {
+
+	console.warn( "THREE.PerspectiveCamera.setLens is deprecated. " +
+			"Use .setFocalLength and .filmGauge for a photographic setup." );
+
+	if ( filmGauge !== undefined ) this.filmGauge = filmGauge;
+	this.setFocalLength( focalLength );
+
+};
+
+//
+
+Object.defineProperties( Light.prototype, {
+	onlyShadow: {
+		set: function () {
+
+			console.warn( 'THREE.Light: .onlyShadow has been removed.' );
+
+		}
+	},
+	shadowCameraFov: {
+		set: function ( value ) {
+
+			console.warn( 'THREE.Light: .shadowCameraFov is now .shadow.camera.fov.' );
+			this.shadow.camera.fov = value;
+
+		}
+	},
+	shadowCameraLeft: {
+		set: function ( value ) {
+
+			console.warn( 'THREE.Light: .shadowCameraLeft is now .shadow.camera.left.' );
+			this.shadow.camera.left = value;
+
+		}
+	},
+	shadowCameraRight: {
+		set: function ( value ) {
+
+			console.warn( 'THREE.Light: .shadowCameraRight is now .shadow.camera.right.' );
+			this.shadow.camera.right = value;
+
+		}
+	},
+	shadowCameraTop: {
+		set: function ( value ) {
+
+			console.warn( 'THREE.Light: .shadowCameraTop is now .shadow.camera.top.' );
+			this.shadow.camera.top = value;
+
+		}
+	},
+	shadowCameraBottom: {
+		set: function ( value ) {
+
+			console.warn( 'THREE.Light: .shadowCameraBottom is now .shadow.camera.bottom.' );
+			this.shadow.camera.bottom = value;
+
+		}
+	},
+	shadowCameraNear: {
+		set: function ( value ) {
+
+			console.warn( 'THREE.Light: .shadowCameraNear is now .shadow.camera.near.' );
+			this.shadow.camera.near = value;
+
+		}
+	},
+	shadowCameraFar: {
+		set: function ( value ) {
+
+			console.warn( 'THREE.Light: .shadowCameraFar is now .shadow.camera.far.' );
+			this.shadow.camera.far = value;
+
+		}
+	},
+	shadowCameraVisible: {
+		set: function () {
+
+			console.warn( 'THREE.Light: .shadowCameraVisible has been removed. Use new THREE.CameraHelper( light.shadow.camera ) instead.' );
+
+		}
+	},
+	shadowBias: {
+		set: function ( value ) {
+
+			console.warn( 'THREE.Light: .shadowBias is now .shadow.bias.' );
+			this.shadow.bias = value;
+
+		}
+	},
+	shadowDarkness: {
+		set: function () {
+
+			console.warn( 'THREE.Light: .shadowDarkness has been removed.' );
+
+		}
+	},
+	shadowMapWidth: {
+		set: function ( value ) {
+
+			console.warn( 'THREE.Light: .shadowMapWidth is now .shadow.mapSize.width.' );
+			this.shadow.mapSize.width = value;
+
+		}
+	},
+	shadowMapHeight: {
+		set: function ( value ) {
+
+			console.warn( 'THREE.Light: .shadowMapHeight is now .shadow.mapSize.height.' );
+			this.shadow.mapSize.height = value;
+
+		}
+	}
+} );
+
+//
+
+Object.defineProperties( BufferAttribute.prototype, {
+
+	length: {
+		get: function () {
+
+			console.warn( 'THREE.BufferAttribute: .length has been deprecated. Use .count instead.' );
+			return this.array.length;
+
+		}
+	},
+	copyIndicesArray: function ( /* indices */ ) {
+
+		console.error( 'THREE.BufferAttribute: .copyIndicesArray() has been removed.' );
+
+	}
+
+} );
+
+Object.assign( BufferGeometry.prototype, {
+
+	addIndex: function ( index ) {
+
+		console.warn( 'THREE.BufferGeometry: .addIndex() has been renamed to .setIndex().' );
+		this.setIndex( index );
+
+	},
+	addDrawCall: function ( start, count, indexOffset ) {
+
+		if ( indexOffset !== undefined ) {
+
+			console.warn( 'THREE.BufferGeometry: .addDrawCall() no longer supports indexOffset.' );
+
+		}
+		console.warn( 'THREE.BufferGeometry: .addDrawCall() is now .addGroup().' );
+		this.addGroup( start, count );
+
+	},
+	clearDrawCalls: function () {
+
+		console.warn( 'THREE.BufferGeometry: .clearDrawCalls() is now .clearGroups().' );
+		this.clearGroups();
+
+	},
+	computeTangents: function () {
+
+		console.warn( 'THREE.BufferGeometry: .computeTangents() has been removed.' );
+
+	},
+	computeOffsets: function () {
+
+		console.warn( 'THREE.BufferGeometry: .computeOffsets() has been removed.' );
+
+	}
+
+} );
+
+Object.defineProperties( BufferGeometry.prototype, {
+
+	drawcalls: {
+		get: function () {
+
+			console.error( 'THREE.BufferGeometry: .drawcalls has been renamed to .groups.' );
+			return this.groups;
+
+		}
+	},
+	offsets: {
+		get: function () {
+
+			console.warn( 'THREE.BufferGeometry: .offsets has been renamed to .groups.' );
+			return this.groups;
+
+		}
+	}
+
+} );
+
+//
+
+Object.assign( ExtrudeBufferGeometry.prototype, {
+
+	getArrays: function () {
+
+		console.error( 'THREE.ExtrudeBufferGeometry: .getArrays() has been removed.' );
+
+	},
+
+	addShapeList: function () {
+
+		console.error( 'THREE.ExtrudeBufferGeometry: .addShapeList() has been removed.' );
+
+	},
+
+	addShape: function () {
+
+		console.error( 'THREE.ExtrudeBufferGeometry: .addShape() has been removed.' );
+
+	}
+
+} );
+
+//
+
+Object.defineProperties( Uniform.prototype, {
+
+	dynamic: {
+		set: function () {
+
+			console.warn( 'THREE.Uniform: .dynamic has been removed. Use object.onBeforeRender() instead.' );
+
+		}
+	},
+	onUpdate: {
+		value: function () {
+
+			console.warn( 'THREE.Uniform: .onUpdate() has been removed. Use object.onBeforeRender() instead.' );
+			return this;
+
+		}
+	}
+
+} );
+
+//
+
+Object.defineProperties( Material.prototype, {
+
+	wrapAround: {
+		get: function () {
+
+			console.warn( 'THREE.Material: .wrapAround has been removed.' );
+
+		},
+		set: function () {
+
+			console.warn( 'THREE.Material: .wrapAround has been removed.' );
+
+		}
+	},
+
+	overdraw: {
+		get: function () {
+
+			console.warn( 'THREE.Material: .overdraw has been removed.' );
+
+		},
+		set: function () {
+
+			console.warn( 'THREE.Material: .overdraw has been removed.' );
+
+		}
+	},
+
+	wrapRGB: {
+		get: function () {
+
+			console.warn( 'THREE.Material: .wrapRGB has been removed.' );
+			return new Color();
+
+		}
+	},
+
+	shading: {
+		get: function () {
+
+			console.error( 'THREE.' + this.type + ': .shading has been removed. Use the boolean .flatShading instead.' );
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.' + this.type + ': .shading has been removed. Use the boolean .flatShading instead.' );
+			this.flatShading = ( value === FlatShading );
+
+		}
+	}
+
+} );
+
+Object.defineProperties( MeshPhongMaterial.prototype, {
+
+	metal: {
+		get: function () {
+
+			console.warn( 'THREE.MeshPhongMaterial: .metal has been removed. Use THREE.MeshStandardMaterial instead.' );
+			return false;
+
+		},
+		set: function () {
+
+			console.warn( 'THREE.MeshPhongMaterial: .metal has been removed. Use THREE.MeshStandardMaterial instead' );
+
+		}
+	}
+
+} );
+
+Object.defineProperties( ShaderMaterial.prototype, {
+
+	derivatives: {
+		get: function () {
+
+			console.warn( 'THREE.ShaderMaterial: .derivatives has been moved to .extensions.derivatives.' );
+			return this.extensions.derivatives;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE. ShaderMaterial: .derivatives has been moved to .extensions.derivatives.' );
+			this.extensions.derivatives = value;
+
+		}
+	}
+
+} );
+
+//
+
+Object.assign( WebGLRenderer.prototype, {
+
+	clearTarget: function ( renderTarget, color, depth, stencil ) {
+
+		console.warn( 'THREE.WebGLRenderer: .clearTarget() has been deprecated. Use .setRenderTarget() and .clear() instead.' );
+		this.setRenderTarget( renderTarget );
+		this.clear( color, depth, stencil );
+
+	},
+	animate: function ( callback ) {
+
+		console.warn( 'THREE.WebGLRenderer: .animate() is now .setAnimationLoop().' );
+		this.setAnimationLoop( callback );
+
+	},
+	getCurrentRenderTarget: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .getCurrentRenderTarget() is now .getRenderTarget().' );
+		return this.getRenderTarget();
+
+	},
+	getMaxAnisotropy: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .getMaxAnisotropy() is now .capabilities.getMaxAnisotropy().' );
+		return this.capabilities.getMaxAnisotropy();
+
+	},
+	getPrecision: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .getPrecision() is now .capabilities.precision.' );
+		return this.capabilities.precision;
+
+	},
+	resetGLState: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .resetGLState() is now .state.reset().' );
+		return this.state.reset();
+
+	},
+	supportsFloatTextures: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .supportsFloatTextures() is now .extensions.get( \'OES_texture_float\' ).' );
+		return this.extensions.get( 'OES_texture_float' );
+
+	},
+	supportsHalfFloatTextures: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .supportsHalfFloatTextures() is now .extensions.get( \'OES_texture_half_float\' ).' );
+		return this.extensions.get( 'OES_texture_half_float' );
+
+	},
+	supportsStandardDerivatives: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .supportsStandardDerivatives() is now .extensions.get( \'OES_standard_derivatives\' ).' );
+		return this.extensions.get( 'OES_standard_derivatives' );
+
+	},
+	supportsCompressedTextureS3TC: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .supportsCompressedTextureS3TC() is now .extensions.get( \'WEBGL_compressed_texture_s3tc\' ).' );
+		return this.extensions.get( 'WEBGL_compressed_texture_s3tc' );
+
+	},
+	supportsCompressedTexturePVRTC: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .supportsCompressedTexturePVRTC() is now .extensions.get( \'WEBGL_compressed_texture_pvrtc\' ).' );
+		return this.extensions.get( 'WEBGL_compressed_texture_pvrtc' );
+
+	},
+	supportsBlendMinMax: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .supportsBlendMinMax() is now .extensions.get( \'EXT_blend_minmax\' ).' );
+		return this.extensions.get( 'EXT_blend_minmax' );
+
+	},
+	supportsVertexTextures: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .supportsVertexTextures() is now .capabilities.vertexTextures.' );
+		return this.capabilities.vertexTextures;
+
+	},
+	supportsInstancedArrays: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .supportsInstancedArrays() is now .extensions.get( \'ANGLE_instanced_arrays\' ).' );
+		return this.extensions.get( 'ANGLE_instanced_arrays' );
+
+	},
+	enableScissorTest: function ( boolean ) {
+
+		console.warn( 'THREE.WebGLRenderer: .enableScissorTest() is now .setScissorTest().' );
+		this.setScissorTest( boolean );
+
+	},
+	initMaterial: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .initMaterial() has been removed.' );
+
+	},
+	addPrePlugin: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .addPrePlugin() has been removed.' );
+
+	},
+	addPostPlugin: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .addPostPlugin() has been removed.' );
+
+	},
+	updateShadowMap: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .updateShadowMap() has been removed.' );
+
+	},
+	setFaceCulling: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .setFaceCulling() has been removed.' );
+
+	},
+	allocTextureUnit: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .allocTextureUnit() has been removed.' );
+
+	},
+	setTexture: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .setTexture() has been removed.' );
+
+	},
+	setTexture2D: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .setTexture2D() has been removed.' );
+
+	},
+	setTextureCube: function () {
+
+		console.warn( 'THREE.WebGLRenderer: .setTextureCube() has been removed.' );
+
+	}
+
+} );
+
+Object.defineProperties( WebGLRenderer.prototype, {
+
+	shadowMapEnabled: {
+		get: function () {
+
+			return this.shadowMap.enabled;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.WebGLRenderer: .shadowMapEnabled is now .shadowMap.enabled.' );
+			this.shadowMap.enabled = value;
+
+		}
+	},
+	shadowMapType: {
+		get: function () {
+
+			return this.shadowMap.type;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.WebGLRenderer: .shadowMapType is now .shadowMap.type.' );
+			this.shadowMap.type = value;
+
+		}
+	},
+	shadowMapCullFace: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderer: .shadowMapCullFace has been removed. Set Material.shadowSide instead.' );
+			return undefined;
+
+		},
+		set: function ( /* value */ ) {
+
+			console.warn( 'THREE.WebGLRenderer: .shadowMapCullFace has been removed. Set Material.shadowSide instead.' );
+
+		}
+	}
+} );
+
+Object.defineProperties( WebGLShadowMap.prototype, {
+
+	cullFace: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderer: .shadowMap.cullFace has been removed. Set Material.shadowSide instead.' );
+			return undefined;
+
+		},
+		set: function ( /* cullFace */ ) {
+
+			console.warn( 'THREE.WebGLRenderer: .shadowMap.cullFace has been removed. Set Material.shadowSide instead.' );
+
+		}
+	},
+	renderReverseSided: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderer: .shadowMap.renderReverseSided has been removed. Set Material.shadowSide instead.' );
+			return undefined;
+
+		},
+		set: function () {
+
+			console.warn( 'THREE.WebGLRenderer: .shadowMap.renderReverseSided has been removed. Set Material.shadowSide instead.' );
+
+		}
+	},
+	renderSingleSided: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderer: .shadowMap.renderSingleSided has been removed. Set Material.shadowSide instead.' );
+			return undefined;
+
+		},
+		set: function () {
+
+			console.warn( 'THREE.WebGLRenderer: .shadowMap.renderSingleSided has been removed. Set Material.shadowSide instead.' );
+
+		}
+	}
+
+} );
+
+//
+
+Object.defineProperties( WebGLRenderTargetCube.prototype, {
+
+	activeCubeFace: {
+		set: function ( /* value */ ) {
+
+			console.warn( 'THREE.WebGLRenderTargetCube: .activeCubeFace has been removed. It is now the second parameter of WebGLRenderer.setRenderTarget().' );
+
+		}
+	},
+	activeMipMapLevel: {
+		set: function ( /* value */ ) {
+
+			console.warn( 'THREE.WebGLRenderTargetCube: .activeMipMapLevel has been removed. It is now the third parameter of WebGLRenderer.setRenderTarget().' );
+
+		}
+	}
+
+} );
+
+//
+
+Object.defineProperties( WebGLRenderTarget.prototype, {
+
+	wrapS: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderTarget: .wrapS is now .texture.wrapS.' );
+			return this.texture.wrapS;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.WebGLRenderTarget: .wrapS is now .texture.wrapS.' );
+			this.texture.wrapS = value;
+
+		}
+	},
+	wrapT: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderTarget: .wrapT is now .texture.wrapT.' );
+			return this.texture.wrapT;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.WebGLRenderTarget: .wrapT is now .texture.wrapT.' );
+			this.texture.wrapT = value;
+
+		}
+	},
+	magFilter: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderTarget: .magFilter is now .texture.magFilter.' );
+			return this.texture.magFilter;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.WebGLRenderTarget: .magFilter is now .texture.magFilter.' );
+			this.texture.magFilter = value;
+
+		}
+	},
+	minFilter: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderTarget: .minFilter is now .texture.minFilter.' );
+			return this.texture.minFilter;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.WebGLRenderTarget: .minFilter is now .texture.minFilter.' );
+			this.texture.minFilter = value;
+
+		}
+	},
+	anisotropy: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderTarget: .anisotropy is now .texture.anisotropy.' );
+			return this.texture.anisotropy;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.WebGLRenderTarget: .anisotropy is now .texture.anisotropy.' );
+			this.texture.anisotropy = value;
+
+		}
+	},
+	offset: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderTarget: .offset is now .texture.offset.' );
+			return this.texture.offset;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.WebGLRenderTarget: .offset is now .texture.offset.' );
+			this.texture.offset = value;
+
+		}
+	},
+	repeat: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderTarget: .repeat is now .texture.repeat.' );
+			return this.texture.repeat;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.WebGLRenderTarget: .repeat is now .texture.repeat.' );
+			this.texture.repeat = value;
+
+		}
+	},
+	format: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderTarget: .format is now .texture.format.' );
+			return this.texture.format;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.WebGLRenderTarget: .format is now .texture.format.' );
+			this.texture.format = value;
+
+		}
+	},
+	type: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderTarget: .type is now .texture.type.' );
+			return this.texture.type;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.WebGLRenderTarget: .type is now .texture.type.' );
+			this.texture.type = value;
+
+		}
+	},
+	generateMipmaps: {
+		get: function () {
+
+			console.warn( 'THREE.WebGLRenderTarget: .generateMipmaps is now .texture.generateMipmaps.' );
+			return this.texture.generateMipmaps;
+
+		},
+		set: function ( value ) {
+
+			console.warn( 'THREE.WebGLRenderTarget: .generateMipmaps is now .texture.generateMipmaps.' );
+			this.texture.generateMipmaps = value;
+
+		}
+	}
+
+} );
+
+//
+
+Object.defineProperties( WebVRManager.prototype, {
+
+	standing: {
+		set: function ( /* value */ ) {
+
+			console.warn( 'THREE.WebVRManager: .standing has been removed.' );
+
+		}
+	},
+	userHeight: {
+		set: function ( /* value */ ) {
+
+			console.warn( 'THREE.WebVRManager: .userHeight has been removed.' );
+
+		}
+	}
+
+} );
+
+//
+
+Audio.prototype.load = function ( file ) {
+
+	console.warn( 'THREE.Audio: .load has been deprecated. Use THREE.AudioLoader instead.' );
+	var scope = this;
+	var audioLoader = new AudioLoader();
+	audioLoader.load( file, function ( buffer ) {
+
+		scope.setBuffer( buffer );
+
+	} );
+	return this;
+
+};
+
+AudioAnalyser.prototype.getData = function () {
+
+	console.warn( 'THREE.AudioAnalyser: .getData() is now .getFrequencyData().' );
+	return this.getFrequencyData();
+
+};
+
+//
+
+CubeCamera.prototype.updateCubeMap = function ( renderer, scene ) {
+
+	console.warn( 'THREE.CubeCamera: .updateCubeMap() is now .update().' );
+	return this.update( renderer, scene );
+
+};
+
+//
+
+var GeometryUtils = {
+
+	merge: function ( geometry1, geometry2, materialIndexOffset ) {
+
+		console.warn( 'THREE.GeometryUtils: .merge() has been moved to Geometry. Use geometry.merge( geometry2, matrix, materialIndexOffset ) instead.' );
+		var matrix;
+
+		if ( geometry2.isMesh ) {
+
+			geometry2.matrixAutoUpdate && geometry2.updateMatrix();
+
+			matrix = geometry2.matrix;
+			geometry2 = geometry2.geometry;
+
+		}
+
+		geometry1.merge( geometry2, matrix, materialIndexOffset );
+
+	},
+
+	center: function ( geometry ) {
+
+		console.warn( 'THREE.GeometryUtils: .center() has been moved to Geometry. Use geometry.center() instead.' );
+		return geometry.center();
+
+	}
+
+};
+
+ImageUtils.crossOrigin = undefined;
+
+ImageUtils.loadTexture = function ( url, mapping, onLoad, onError ) {
+
+	console.warn( 'THREE.ImageUtils.loadTexture has been deprecated. Use THREE.TextureLoader() instead.' );
+
+	var loader = new TextureLoader();
+	loader.setCrossOrigin( this.crossOrigin );
+
+	var texture = loader.load( url, onLoad, undefined, onError );
+
+	if ( mapping ) texture.mapping = mapping;
+
+	return texture;
+
+};
+
+ImageUtils.loadTextureCube = function ( urls, mapping, onLoad, onError ) {
+
+	console.warn( 'THREE.ImageUtils.loadTextureCube has been deprecated. Use THREE.CubeTextureLoader() instead.' );
+
+	var loader = new CubeTextureLoader();
+	loader.setCrossOrigin( this.crossOrigin );
+
+	var texture = loader.load( urls, onLoad, undefined, onError );
+
+	if ( mapping ) texture.mapping = mapping;
+
+	return texture;
+
+};
+
+ImageUtils.loadCompressedTexture = function () {
+
+	console.error( 'THREE.ImageUtils.loadCompressedTexture has been removed. Use THREE.DDSLoader instead.' );
+
+};
+
+ImageUtils.loadCompressedTextureCube = function () {
+
+	console.error( 'THREE.ImageUtils.loadCompressedTextureCube has been removed. Use THREE.DDSLoader instead.' );
+
+};
+
+//
+
+function CanvasRenderer() {
+
+	console.error( 'THREE.CanvasRenderer has been removed' );
+
+}
+
+//
+
+function JSONLoader() {
+
+	console.error( 'THREE.JSONLoader has been removed.' );
+
+}
+
+//
+
+var SceneUtils = {
+
+	createMultiMaterialObject: function ( /* geometry, materials */ ) {
+
+		console.error( 'THREE.SceneUtils has been moved to /examples/js/utils/SceneUtils.js' );
+
+	},
+
+	detach: function ( /* child, parent, scene */ ) {
+
+		console.error( 'THREE.SceneUtils has been moved to /examples/js/utils/SceneUtils.js' );
+
+	},
+
+	attach: function ( /* child, scene, parent */ ) {
+
+		console.error( 'THREE.SceneUtils has been moved to /examples/js/utils/SceneUtils.js' );
+
+	}
+
+};
+
+//
+
+function LensFlare() {
+
+	console.error( 'THREE.LensFlare has been moved to /examples/js/objects/Lensflare.js' );
+
+}
+
+/**
+ * @author mrdoob / http://mrdoob.com/
+ */
+
+
+function ImageLoader(manager) {
+
+	this.manager = (manager !== undefined) ? manager : DefaultLoadingManager;
+
+}
+
+Object.assign(ImageLoader.prototype, {
+
+	crossOrigin: 'anonymous',
+
+	load: function ( url, onLoad, onProgress, onError ) {
+
+		if ( url === undefined ) url = '';
+
+		if ( this.path !== undefined ) url = this.path + url;
+
+		url = this.manager.resolveURL( url );
+
+		var scope = this;
+
+		var cached = Cache.get( url );
+
+		if ( cached !== undefined ) {
+
+			scope.manager.itemStart( url );
+
+			setTimeout( function () {
+
+				if ( onLoad ) onLoad( cached );
+
+				scope.manager.itemEnd( url );
+
+			}, 0 );
+
+			return cached;
+
+		}
+
+		var image = document.createElementNS( 'http://www.w3.org/1999/xhtml', 'img' );
+
+		function onImageLoad() {
+
+			image.removeEventListener( 'load', onImageLoad, false );
+			image.removeEventListener( 'error', onImageError, false );
+
+			Cache.add( url, this );
+
+			if ( onLoad ) onLoad( this );
+
+			scope.manager.itemEnd( url );
+
+		}
+
+		function onImageError( event ) {
+
+			image.removeEventListener( 'load', onImageLoad, false );
+			image.removeEventListener( 'error', onImageError, false );
+
+			if ( onError ) onError( event );
+
+			scope.manager.itemError( url );
+			scope.manager.itemEnd( url );
+
+		}
+
+		image.addEventListener( 'load', onImageLoad, false );
+		image.addEventListener( 'error', onImageError, false );
+
+		if ( url.substr( 0, 5 ) !== 'data:' ) {
+
+			if ( this.crossOrigin !== undefined ) image.crossOrigin = this.crossOrigin;
+
+		}
+
+		scope.manager.itemStart( url );
+
+		image.src = url;
+
+		return image;
+
+	},
+	// load: function (url, callback, options, oncontinue) {
+	// 	var scope = this;
+	// 	var img = document.createElementNS("http://www.w3.org/1999/xhtml", "img");
+	// 	if (img.onload = function () {
+	// 		URL.revokeObjectURL(img.src);
+	// 		if (callback) {
+	// 			callback(img);
+	// 		}
+	// 		scope.manager.itemEnd(url);
+	// 	}, 0 === url.indexOf("data:")) {
+	// 		/** @type {string} */
+	// 		img.src = url;
+	// 	} else {
+	// 		var loader = new XHRLoader;
+	// 		loader.setPath(this.path);
+	// 		loader.setResponseType("blob");
+	// 		loader.load(url, function (file) {
+	// 			/** @type {string} */
+	// 			img.src = URL.createObjectURL(file);
+	// 		}, options, oncontinue);
+	// 	}
+	// 	return scope.manager.itemStart(url), img;
+	// },
+	setCrossOrigin: function (value) {
+
+		this.crossOrigin = value;
+		return this;
+
+	},
+
+	setPath: function (value) {
+
+		this.path = value;
+		return this;
+
+	}
+
+});
+
+/**
+ * @author mrdoob / http://mrdoob.com/
+ */
+
+
+function CubeTextureLoader( manager ) {
+
+	this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
+
+}
+
+Object.assign( CubeTextureLoader.prototype, {
+
+	crossOrigin: 'anonymous',
+
+	load: function ( urls, onLoad, onProgress, onError ) {
+
+		var texture = new CubeTexture();
+
+		var loader = new ImageLoader( this.manager );
+		loader.setCrossOrigin( this.crossOrigin );
+		loader.setPath( this.path );
+
+		var loaded = 0;
+
+		function loadTexture( i ) {
+
+			loader.load( urls[ i ], function ( image ) {
+
+				texture.images[ i ] = image;
+
+				loaded ++;
+
+				if ( loaded === 6 ) {
+
+					texture.needsUpdate = true;
+
+					if ( onLoad ) onLoad( texture );
+
+				}
+
+			}, undefined, onError );
+
+		}
+
+		for ( var i = 0; i < urls.length; ++ i ) {
+
+			loadTexture( i );
+
+		}
+
+		return texture;
+
+	},
+
+	setCrossOrigin: function ( value ) {
+
+		this.crossOrigin = value;
+		return this;
+
+	},
+
+	setPath: function ( value ) {
+
+		this.path = value;
+		return this;
+
+	}
+
+} );
+
+/**
  * @author thespite / http://clicktorelease.com/
  */
 
@@ -39939,396 +43439,6 @@ Object.assign( FontLoader.prototype, {
 } );
 
 /**
- * @author alteredq / http://alteredqualia.com/
- */
-
-function Loader() {}
-
-Loader.Handlers = {
-
-	handlers: [],
-
-	add: function ( regex, loader ) {
-
-		this.handlers.push( regex, loader );
-
-	},
-
-	get: function ( file ) {
-
-		var handlers = this.handlers;
-
-		for ( var i = 0, l = handlers.length; i < l; i += 2 ) {
-
-			var regex = handlers[ i ];
-			var loader = handlers[ i + 1 ];
-
-			if ( regex.test( file ) ) {
-
-				return loader;
-
-			}
-
-		}
-
-		return null;
-
-	}
-
-};
-
-Object.assign( Loader.prototype, {
-
-	crossOrigin: 'anonymous',
-
-	onLoadStart: function () {},
-
-	onLoadProgress: function () {},
-
-	onLoadComplete: function () {},
-
-	initMaterials: function ( materials, texturePath, crossOrigin ) {
-
-		var array = [];
-
-		for ( var i = 0; i < materials.length; ++ i ) {
-
-			array[ i ] = this.createMaterial( materials[ i ], texturePath, crossOrigin );
-
-		}
-
-		return array;
-
-	},
-
-	createMaterial: ( function () {
-
-		var BlendingMode = {
-			NoBlending: NoBlending,
-			NormalBlending: NormalBlending,
-			AdditiveBlending: AdditiveBlending,
-			SubtractiveBlending: SubtractiveBlending,
-			MultiplyBlending: MultiplyBlending,
-			CustomBlending: CustomBlending
-		};
-
-		var color = new Color();
-		var textureLoader = new TextureLoader();
-		var materialLoader = new MaterialLoader();
-
-		return function createMaterial( m, texturePath, crossOrigin ) {
-
-			// convert from old material format
-
-			var textures = {};
-
-			function loadTexture( path, repeat, offset, wrap, anisotropy ) {
-
-				var fullPath = texturePath + path;
-				var loader = Loader.Handlers.get( fullPath );
-
-				var texture;
-
-				if ( loader !== null ) {
-
-					texture = loader.load( fullPath );
-
-				} else {
-
-					textureLoader.setCrossOrigin( crossOrigin );
-					texture = textureLoader.load( fullPath );
-
-				}
-
-				if ( repeat !== undefined ) {
-
-					texture.repeat.fromArray( repeat );
-
-					if ( repeat[ 0 ] !== 1 ) texture.wrapS = RepeatWrapping;
-					if ( repeat[ 1 ] !== 1 ) texture.wrapT = RepeatWrapping;
-
-				}
-
-				if ( offset !== undefined ) {
-
-					texture.offset.fromArray( offset );
-
-				}
-
-				if ( wrap !== undefined ) {
-
-					if ( wrap[ 0 ] === 'repeat' ) texture.wrapS = RepeatWrapping;
-					if ( wrap[ 0 ] === 'mirror' ) texture.wrapS = MirroredRepeatWrapping;
-
-					if ( wrap[ 1 ] === 'repeat' ) texture.wrapT = RepeatWrapping;
-					if ( wrap[ 1 ] === 'mirror' ) texture.wrapT = MirroredRepeatWrapping;
-
-				}
-
-				if ( anisotropy !== undefined ) {
-
-					texture.anisotropy = anisotropy;
-
-				}
-
-				var uuid = _Math.generateUUID();
-
-				textures[ uuid ] = texture;
-
-				return uuid;
-
-			}
-
-			//
-
-			var json = {
-				uuid: _Math.generateUUID(),
-				type: 'MeshLambertMaterial'
-			};
-
-			for ( var name in m ) {
-
-				var value = m[ name ];
-
-				switch ( name ) {
-
-					case 'DbgColor':
-					case 'DbgIndex':
-					case 'opticalDensity':
-					case 'illumination':
-						break;
-					case 'DbgName':
-						json.name = value;
-						break;
-					case 'blending':
-						json.blending = BlendingMode[ value ];
-						break;
-					case 'colorAmbient':
-					case 'mapAmbient':
-						console.warn( 'THREE.Loader.createMaterial:', name, 'is no longer supported.' );
-						break;
-					case 'colorDiffuse':
-						json.color = color.fromArray( value ).getHex();
-						break;
-					case 'colorSpecular':
-						json.specular = color.fromArray( value ).getHex();
-						break;
-					case 'colorEmissive':
-						json.emissive = color.fromArray( value ).getHex();
-						break;
-					case 'specularCoef':
-						json.shininess = value;
-						break;
-					case 'shading':
-						if ( value.toLowerCase() === 'basic' ) json.type = 'MeshBasicMaterial';
-						if ( value.toLowerCase() === 'phong' ) json.type = 'MeshPhongMaterial';
-						if ( value.toLowerCase() === 'standard' ) json.type = 'MeshStandardMaterial';
-						break;
-					case 'mapDiffuse':
-						json.map = loadTexture( value, m.mapDiffuseRepeat, m.mapDiffuseOffset, m.mapDiffuseWrap, m.mapDiffuseAnisotropy );
-						break;
-					case 'mapDiffuseRepeat':
-					case 'mapDiffuseOffset':
-					case 'mapDiffuseWrap':
-					case 'mapDiffuseAnisotropy':
-						break;
-					case 'mapEmissive':
-						json.emissiveMap = loadTexture( value, m.mapEmissiveRepeat, m.mapEmissiveOffset, m.mapEmissiveWrap, m.mapEmissiveAnisotropy );
-						break;
-					case 'mapEmissiveRepeat':
-					case 'mapEmissiveOffset':
-					case 'mapEmissiveWrap':
-					case 'mapEmissiveAnisotropy':
-						break;
-					case 'mapLight':
-						json.lightMap = loadTexture( value, m.mapLightRepeat, m.mapLightOffset, m.mapLightWrap, m.mapLightAnisotropy );
-						break;
-					case 'mapLightRepeat':
-					case 'mapLightOffset':
-					case 'mapLightWrap':
-					case 'mapLightAnisotropy':
-						break;
-					case 'mapAO':
-						json.aoMap = loadTexture( value, m.mapAORepeat, m.mapAOOffset, m.mapAOWrap, m.mapAOAnisotropy );
-						break;
-					case 'mapAORepeat':
-					case 'mapAOOffset':
-					case 'mapAOWrap':
-					case 'mapAOAnisotropy':
-						break;
-					case 'mapBump':
-						json.bumpMap = loadTexture( value, m.mapBumpRepeat, m.mapBumpOffset, m.mapBumpWrap, m.mapBumpAnisotropy );
-						break;
-					case 'mapBumpScale':
-						json.bumpScale = value;
-						break;
-					case 'mapBumpRepeat':
-					case 'mapBumpOffset':
-					case 'mapBumpWrap':
-					case 'mapBumpAnisotropy':
-						break;
-					case 'mapNormal':
-						json.normalMap = loadTexture( value, m.mapNormalRepeat, m.mapNormalOffset, m.mapNormalWrap, m.mapNormalAnisotropy );
-						break;
-					case 'mapNormalFactor':
-						json.normalScale = value;
-						break;
-					case 'mapNormalRepeat':
-					case 'mapNormalOffset':
-					case 'mapNormalWrap':
-					case 'mapNormalAnisotropy':
-						break;
-					case 'mapSpecular':
-						json.specularMap = loadTexture( value, m.mapSpecularRepeat, m.mapSpecularOffset, m.mapSpecularWrap, m.mapSpecularAnisotropy );
-						break;
-					case 'mapSpecularRepeat':
-					case 'mapSpecularOffset':
-					case 'mapSpecularWrap':
-					case 'mapSpecularAnisotropy':
-						break;
-					case 'mapMetalness':
-						json.metalnessMap = loadTexture( value, m.mapMetalnessRepeat, m.mapMetalnessOffset, m.mapMetalnessWrap, m.mapMetalnessAnisotropy );
-						break;
-					case 'mapMetalnessRepeat':
-					case 'mapMetalnessOffset':
-					case 'mapMetalnessWrap':
-					case 'mapMetalnessAnisotropy':
-						break;
-					case 'mapRoughness':
-						json.roughnessMap = loadTexture( value, m.mapRoughnessRepeat, m.mapRoughnessOffset, m.mapRoughnessWrap, m.mapRoughnessAnisotropy );
-						break;
-					case 'mapRoughnessRepeat':
-					case 'mapRoughnessOffset':
-					case 'mapRoughnessWrap':
-					case 'mapRoughnessAnisotropy':
-						break;
-					case 'mapAlpha':
-						json.alphaMap = loadTexture( value, m.mapAlphaRepeat, m.mapAlphaOffset, m.mapAlphaWrap, m.mapAlphaAnisotropy );
-						break;
-					case 'mapAlphaRepeat':
-					case 'mapAlphaOffset':
-					case 'mapAlphaWrap':
-					case 'mapAlphaAnisotropy':
-						break;
-					case 'flipSided':
-						json.side = BackSide;
-						break;
-					case 'doubleSided':
-						json.side = DoubleSide;
-						break;
-					case 'transparency':
-						console.warn( 'THREE.Loader.createMaterial: transparency has been renamed to opacity' );
-						json.opacity = value;
-						break;
-					case 'depthTest':
-					case 'depthWrite':
-					case 'colorWrite':
-					case 'opacity':
-					case 'reflectivity':
-					case 'transparent':
-					case 'visible':
-					case 'wireframe':
-						json[ name ] = value;
-						break;
-					case 'vertexColors':
-						if ( value === true ) json.vertexColors = VertexColors;
-						if ( value === 'face' ) json.vertexColors = FaceColors;
-						break;
-					default:
-						console.error( 'THREE.Loader.createMaterial: Unsupported', name, value );
-						break;
-
-				}
-
-			}
-
-			if ( json.type === 'MeshBasicMaterial' ) delete json.emissive;
-			if ( json.type !== 'MeshPhongMaterial' ) delete json.specular;
-
-			if ( json.opacity < 1 ) json.transparent = true;
-
-			materialLoader.setTextures( textures );
-
-			return materialLoader.parse( json );
-
-		};
-
-	} )()
-
-} );
-
-/**
- * @author mrdoob / http://mrdoob.com/
- */
-
-var context;
-
-var AudioContext = {
-
-	getContext: function () {
-
-		if ( context === undefined ) {
-
-			context = new ( window.AudioContext || window.webkitAudioContext )();
-
-		}
-
-		return context;
-
-	},
-
-	setContext: function ( value ) {
-
-		context = value;
-
-	}
-
-};
-
-/**
- * @author Reece Aaron Lecrivain / http://reecenotes.com/
- */
-
-function AudioLoader( manager ) {
-
-	this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
-
-}
-
-Object.assign( AudioLoader.prototype, {
-
-	load: function ( url, onLoad, onProgress, onError ) {
-
-		var loader = new FileLoader( this.manager );
-		loader.setResponseType( 'arraybuffer' );
-		loader.setPath( this.path );
-		loader.load( url, function ( buffer ) {
-
-			// Create a copy of the buffer. The `decodeAudioData` method
-			// detaches the buffer when complete, preventing reuse.
-			var bufferCopy = buffer.slice( 0 );
-
-			var context = AudioContext.getContext();
-			context.decodeAudioData( bufferCopy, function ( audioBuffer ) {
-
-				onLoad( audioBuffer );
-
-			} );
-
-		}, onProgress, onError );
-
-	},
-
-	setPath: function ( value ) {
-
-		this.path = value;
-		return this;
-
-	}
-
-} );
-
-/**
  * @author bhouston / http://clara.io
  * @author WestLangley / http://github.com/WestLangley
  *
@@ -40791,114 +43901,6 @@ Object.assign( StereoCamera.prototype, {
 } );
 
 /**
- * Camera for rendering cube maps
- *	- renders scene into axis-aligned cube
- *
- * @author alteredq / http://alteredqualia.com/
- */
-
-var fov = 90, aspect = 1;
-
-function CubeCamera( near, far, cubeResolution, options ) {
-
-	Object3D.call( this );
-
-	this.type = 'CubeCamera';
-
-	var cameraPX = new PerspectiveCamera( fov, aspect, near, far );
-	cameraPX.up.set( 0, - 1, 0 );
-	cameraPX.lookAt( new Vector3( 1, 0, 0 ) );
-	this.add( cameraPX );
-
-	var cameraNX = new PerspectiveCamera( fov, aspect, near, far );
-	cameraNX.up.set( 0, - 1, 0 );
-	cameraNX.lookAt( new Vector3( - 1, 0, 0 ) );
-	this.add( cameraNX );
-
-	var cameraPY = new PerspectiveCamera( fov, aspect, near, far );
-	cameraPY.up.set( 0, 0, 1 );
-	cameraPY.lookAt( new Vector3( 0, 1, 0 ) );
-	this.add( cameraPY );
-
-	var cameraNY = new PerspectiveCamera( fov, aspect, near, far );
-	cameraNY.up.set( 0, 0, - 1 );
-	cameraNY.lookAt( new Vector3( 0, - 1, 0 ) );
-	this.add( cameraNY );
-
-	var cameraPZ = new PerspectiveCamera( fov, aspect, near, far );
-	cameraPZ.up.set( 0, - 1, 0 );
-	cameraPZ.lookAt( new Vector3( 0, 0, 1 ) );
-	this.add( cameraPZ );
-
-	var cameraNZ = new PerspectiveCamera( fov, aspect, near, far );
-	cameraNZ.up.set( 0, - 1, 0 );
-	cameraNZ.lookAt( new Vector3( 0, 0, - 1 ) );
-	this.add( cameraNZ );
-
-	options = options || { format: RGBFormat, magFilter: LinearFilter, minFilter: LinearFilter };
-
-	this.renderTarget = new WebGLRenderTargetCube( cubeResolution, cubeResolution, options );
-	this.renderTarget.texture.name = "CubeCamera";
-
-	this.update = function ( renderer, scene ) {
-
-		if ( this.parent === null ) this.updateMatrixWorld();
-
-		var currentRenderTarget = renderer.getRenderTarget();
-
-		var renderTarget = this.renderTarget;
-		var generateMipmaps = renderTarget.texture.generateMipmaps;
-
-		renderTarget.texture.generateMipmaps = false;
-
-		renderer.setRenderTarget( renderTarget, 0 );
-		renderer.render( scene, cameraPX );
-
-		renderer.setRenderTarget( renderTarget, 1 );
-		renderer.render( scene, cameraNX );
-
-		renderer.setRenderTarget( renderTarget, 2 );
-		renderer.render( scene, cameraPY );
-
-		renderer.setRenderTarget( renderTarget, 3 );
-		renderer.render( scene, cameraNY );
-
-		renderer.setRenderTarget( renderTarget, 4 );
-		renderer.render( scene, cameraPZ );
-
-		renderTarget.texture.generateMipmaps = generateMipmaps;
-
-		renderer.setRenderTarget( renderTarget, 5 );
-		renderer.render( scene, cameraNZ );
-
-		renderer.setRenderTarget( currentRenderTarget );
-
-	};
-
-	this.clear = function ( renderer, color, depth, stencil ) {
-
-		var currentRenderTarget = renderer.getRenderTarget();
-
-		var renderTarget = this.renderTarget;
-
-		for ( var i = 0; i < 6; i ++ ) {
-
-			renderer.setRenderTarget( renderTarget, i );
-
-			renderer.clear( color, depth, stencil );
-
-		}
-
-		renderer.setRenderTarget( currentRenderTarget );
-
-	};
-
-}
-
-CubeCamera.prototype = Object.create( Object3D.prototype );
-CubeCamera.prototype.constructor = CubeCamera;
-
-/**
  * @author alteredq / http://alteredqualia.com/
  */
 
@@ -41109,348 +44111,6 @@ AudioListener.prototype = Object.assign( Object.create( Object3D.prototype ), {
 
 /**
  * @author mrdoob / http://mrdoob.com/
- * @author Reece Aaron Lecrivain / http://reecenotes.com/
- */
-
-function Audio( listener ) {
-
-	Object3D.call( this );
-
-	this.type = 'Audio';
-
-	this.listener = listener;
-	this.context = listener.context;
-
-	this.gain = this.context.createGain();
-	this.gain.connect( listener.getInput() );
-
-	this.autoplay = false;
-
-	this.buffer = null;
-	this.detune = 0;
-	this.loop = false;
-	this.startTime = 0;
-	this.offset = 0;
-	this.playbackRate = 1;
-	this.isPlaying = false;
-	this.hasPlaybackControl = true;
-	this.sourceType = 'empty';
-
-	this.filters = [];
-
-}
-
-Audio.prototype = Object.assign( Object.create( Object3D.prototype ), {
-
-	constructor: Audio,
-
-	getOutput: function () {
-
-		return this.gain;
-
-	},
-
-	setNodeSource: function ( audioNode ) {
-
-		this.hasPlaybackControl = false;
-		this.sourceType = 'audioNode';
-		this.source = audioNode;
-		this.connect();
-
-		return this;
-
-	},
-
-	setMediaElementSource: function ( mediaElement ) {
-
-		this.hasPlaybackControl = false;
-		this.sourceType = 'mediaNode';
-		this.source = this.context.createMediaElementSource( mediaElement );
-		this.connect();
-
-		return this;
-
-	},
-
-	setBuffer: function ( audioBuffer ) {
-
-		this.buffer = audioBuffer;
-		this.sourceType = 'buffer';
-
-		if ( this.autoplay ) this.play();
-
-		return this;
-
-	},
-
-	play: function () {
-
-		if ( this.isPlaying === true ) {
-
-			console.warn( 'THREE.Audio: Audio is already playing.' );
-			return;
-
-		}
-
-		if ( this.hasPlaybackControl === false ) {
-
-			console.warn( 'THREE.Audio: this Audio has no playback control.' );
-			return;
-
-		}
-
-		var source = this.context.createBufferSource();
-
-		source.buffer = this.buffer;
-		source.loop = this.loop;
-		source.onended = this.onEnded.bind( this );
-		this.startTime = this.context.currentTime;
-		source.start( this.startTime, this.offset );
-
-		this.isPlaying = true;
-
-		this.source = source;
-
-		this.setDetune( this.detune );
-		this.setPlaybackRate( this.playbackRate );
-
-		return this.connect();
-
-	},
-
-	pause: function () {
-
-		if ( this.hasPlaybackControl === false ) {
-
-			console.warn( 'THREE.Audio: this Audio has no playback control.' );
-			return;
-
-		}
-
-		if ( this.isPlaying === true ) {
-
-			this.source.stop();
-			this.source.onended = null;
-			this.offset += ( this.context.currentTime - this.startTime ) * this.playbackRate;
-			this.isPlaying = false;
-
-		}
-
-		return this;
-
-	},
-
-	stop: function () {
-
-		if ( this.hasPlaybackControl === false ) {
-
-			console.warn( 'THREE.Audio: this Audio has no playback control.' );
-			return;
-
-		}
-
-		this.source.stop();
-		this.source.onended = null;
-		this.offset = 0;
-		this.isPlaying = false;
-
-		return this;
-
-	},
-
-	connect: function () {
-
-		if ( this.filters.length > 0 ) {
-
-			this.source.connect( this.filters[ 0 ] );
-
-			for ( var i = 1, l = this.filters.length; i < l; i ++ ) {
-
-				this.filters[ i - 1 ].connect( this.filters[ i ] );
-
-			}
-
-			this.filters[ this.filters.length - 1 ].connect( this.getOutput() );
-
-		} else {
-
-			this.source.connect( this.getOutput() );
-
-		}
-
-		return this;
-
-	},
-
-	disconnect: function () {
-
-		if ( this.filters.length > 0 ) {
-
-			this.source.disconnect( this.filters[ 0 ] );
-
-			for ( var i = 1, l = this.filters.length; i < l; i ++ ) {
-
-				this.filters[ i - 1 ].disconnect( this.filters[ i ] );
-
-			}
-
-			this.filters[ this.filters.length - 1 ].disconnect( this.getOutput() );
-
-		} else {
-
-			this.source.disconnect( this.getOutput() );
-
-		}
-
-		return this;
-
-	},
-
-	getFilters: function () {
-
-		return this.filters;
-
-	},
-
-	setFilters: function ( value ) {
-
-		if ( ! value ) value = [];
-
-		if ( this.isPlaying === true ) {
-
-			this.disconnect();
-			this.filters = value;
-			this.connect();
-
-		} else {
-
-			this.filters = value;
-
-		}
-
-		return this;
-
-	},
-
-	setDetune: function ( value ) {
-
-		this.detune = value;
-
-		if ( this.source.detune === undefined ) return; // only set detune when available
-
-		if ( this.isPlaying === true ) {
-
-			this.source.detune.setTargetAtTime( this.detune, this.context.currentTime, 0.01 );
-
-		}
-
-		return this;
-
-	},
-
-	getDetune: function () {
-
-		return this.detune;
-
-	},
-
-	getFilter: function () {
-
-		return this.getFilters()[ 0 ];
-
-	},
-
-	setFilter: function ( filter ) {
-
-		return this.setFilters( filter ? [ filter ] : [] );
-
-	},
-
-	setPlaybackRate: function ( value ) {
-
-		if ( this.hasPlaybackControl === false ) {
-
-			console.warn( 'THREE.Audio: this Audio has no playback control.' );
-			return;
-
-		}
-
-		this.playbackRate = value;
-
-		if ( this.isPlaying === true ) {
-
-			this.source.playbackRate.setTargetAtTime( this.playbackRate, this.context.currentTime, 0.01 );
-
-		}
-
-		return this;
-
-	},
-
-	getPlaybackRate: function () {
-
-		return this.playbackRate;
-
-	},
-
-	onEnded: function () {
-
-		this.isPlaying = false;
-
-	},
-
-	getLoop: function () {
-
-		if ( this.hasPlaybackControl === false ) {
-
-			console.warn( 'THREE.Audio: this Audio has no playback control.' );
-			return false;
-
-		}
-
-		return this.loop;
-
-	},
-
-	setLoop: function ( value ) {
-
-		if ( this.hasPlaybackControl === false ) {
-
-			console.warn( 'THREE.Audio: this Audio has no playback control.' );
-			return;
-
-		}
-
-		this.loop = value;
-
-		if ( this.isPlaying === true ) {
-
-			this.source.loop = this.loop;
-
-		}
-
-		return this;
-
-	},
-
-	getVolume: function () {
-
-		return this.gain.gain.value;
-
-	},
-
-	setVolume: function ( value ) {
-
-		this.gain.gain.setTargetAtTime( value, this.context.currentTime, 0.01 );
-
-		return this;
-
-	}
-
-} );
-
-/**
- * @author mrdoob / http://mrdoob.com/
  */
 
 function PositionalAudio( listener ) {
@@ -41583,47 +44243,6 @@ PositionalAudio.prototype = Object.assign( Object.create( Audio.prototype ), {
 
 	} )()
 
-
-} );
-
-/**
- * @author mrdoob / http://mrdoob.com/
- */
-
-function AudioAnalyser( audio, fftSize ) {
-
-	this.analyser = audio.context.createAnalyser();
-	this.analyser.fftSize = fftSize !== undefined ? fftSize : 2048;
-
-	this.data = new Uint8Array( this.analyser.frequencyBinCount );
-
-	audio.getOutput().connect( this.analyser );
-
-}
-
-Object.assign( AudioAnalyser.prototype, {
-
-	getFrequencyData: function () {
-
-		this.analyser.getByteFrequencyData( this.data );
-
-		return this.data;
-
-	},
-
-	getAverageFrequency: function () {
-
-		var value = 0, data = this.getFrequencyData();
-
-		for ( var i = 0; i < data.length; i ++ ) {
-
-			value += data[ i ];
-
-		}
-
-		return value / data.length;
-
-	}
 
 } );
 
@@ -44367,29 +46986,6 @@ AnimationMixer.prototype = Object.assign( Object.create( EventDispatcher.prototy
 } );
 
 /**
- * @author mrdoob / http://mrdoob.com/
- */
-
-function Uniform( value ) {
-
-	if ( typeof value === 'string' ) {
-
-		console.warn( 'THREE.Uniform: Type parameter is no longer needed.' );
-		value = arguments[ 1 ];
-
-	}
-
-	this.value = value;
-
-}
-
-Uniform.prototype.clone = function () {
-
-	return new Uniform( this.value.clone === undefined ? this.value : this.value.clone() );
-
-};
-
-/**
  * @author benaadams / https://twitter.com/ben_a_adams
  */
 
@@ -44699,393 +47295,6 @@ Object.assign( Cylindrical.prototype, {
 } );
 
 /**
- * @author bhouston / http://clara.io
- */
-
-function Box2( min, max ) {
-
-	this.min = ( min !== undefined ) ? min : new Vector2( + Infinity, + Infinity );
-	this.max = ( max !== undefined ) ? max : new Vector2( - Infinity, - Infinity );
-
-}
-
-Object.assign( Box2.prototype, {
-
-	set: function ( min, max ) {
-
-		this.min.copy( min );
-		this.max.copy( max );
-
-		return this;
-
-	},
-
-	setFromPoints: function ( points ) {
-
-		this.makeEmpty();
-
-		for ( var i = 0, il = points.length; i < il; i ++ ) {
-
-			this.expandByPoint( points[ i ] );
-
-		}
-
-		return this;
-
-	},
-
-	setFromCenterAndSize: function () {
-
-		var v1 = new Vector2();
-
-		return function setFromCenterAndSize( center, size ) {
-
-			var halfSize = v1.copy( size ).multiplyScalar( 0.5 );
-			this.min.copy( center ).sub( halfSize );
-			this.max.copy( center ).add( halfSize );
-
-			return this;
-
-		};
-
-	}(),
-
-	clone: function () {
-
-		return new this.constructor().copy( this );
-
-	},
-
-	copy: function ( box ) {
-
-		this.min.copy( box.min );
-		this.max.copy( box.max );
-
-		return this;
-
-	},
-
-	makeEmpty: function () {
-
-		this.min.x = this.min.y = + Infinity;
-		this.max.x = this.max.y = - Infinity;
-
-		return this;
-
-	},
-
-	isEmpty: function () {
-
-		// this is a more robust check for empty than ( volume <= 0 ) because volume can get positive with two negative axes
-
-		return ( this.max.x < this.min.x ) || ( this.max.y < this.min.y );
-
-	},
-
-	getCenter: function ( target ) {
-
-		if ( target === undefined ) {
-
-			console.warn( 'THREE.Box2: .getCenter() target is now required' );
-			target = new Vector2();
-
-		}
-
-		return this.isEmpty() ? target.set( 0, 0 ) : target.addVectors( this.min, this.max ).multiplyScalar( 0.5 );
-
-	},
-
-	getSize: function ( target ) {
-
-		if ( target === undefined ) {
-
-			console.warn( 'THREE.Box2: .getSize() target is now required' );
-			target = new Vector2();
-
-		}
-
-		return this.isEmpty() ? target.set( 0, 0 ) : target.subVectors( this.max, this.min );
-
-	},
-
-	expandByPoint: function ( point ) {
-
-		this.min.min( point );
-		this.max.max( point );
-
-		return this;
-
-	},
-
-	expandByVector: function ( vector ) {
-
-		this.min.sub( vector );
-		this.max.add( vector );
-
-		return this;
-
-	},
-
-	expandByScalar: function ( scalar ) {
-
-		this.min.addScalar( - scalar );
-		this.max.addScalar( scalar );
-
-		return this;
-
-	},
-
-	containsPoint: function ( point ) {
-
-		return point.x < this.min.x || point.x > this.max.x ||
-			point.y < this.min.y || point.y > this.max.y ? false : true;
-
-	},
-
-	containsBox: function ( box ) {
-
-		return this.min.x <= box.min.x && box.max.x <= this.max.x &&
-			this.min.y <= box.min.y && box.max.y <= this.max.y;
-
-	},
-
-	getParameter: function ( point, target ) {
-
-		// This can potentially have a divide by zero if the box
-		// has a size dimension of 0.
-
-		if ( target === undefined ) {
-
-			console.warn( 'THREE.Box2: .getParameter() target is now required' );
-			target = new Vector2();
-
-		}
-
-		return target.set(
-			( point.x - this.min.x ) / ( this.max.x - this.min.x ),
-			( point.y - this.min.y ) / ( this.max.y - this.min.y )
-		);
-
-	},
-
-	intersectsBox: function ( box ) {
-
-		// using 4 splitting planes to rule out intersections
-
-		return box.max.x < this.min.x || box.min.x > this.max.x ||
-			box.max.y < this.min.y || box.min.y > this.max.y ? false : true;
-
-	},
-
-	clampPoint: function ( point, target ) {
-
-		if ( target === undefined ) {
-
-			console.warn( 'THREE.Box2: .clampPoint() target is now required' );
-			target = new Vector2();
-
-		}
-
-		return target.copy( point ).clamp( this.min, this.max );
-
-	},
-
-	distanceToPoint: function () {
-
-		var v1 = new Vector2();
-
-		return function distanceToPoint( point ) {
-
-			var clampedPoint = v1.copy( point ).clamp( this.min, this.max );
-			return clampedPoint.sub( point ).length();
-
-		};
-
-	}(),
-
-	intersect: function ( box ) {
-
-		this.min.max( box.min );
-		this.max.min( box.max );
-
-		return this;
-
-	},
-
-	union: function ( box ) {
-
-		this.min.min( box.min );
-		this.max.max( box.max );
-
-		return this;
-
-	},
-
-	translate: function ( offset ) {
-
-		this.min.add( offset );
-		this.max.add( offset );
-
-		return this;
-
-	},
-
-	equals: function ( box ) {
-
-		return box.min.equals( this.min ) && box.max.equals( this.max );
-
-	}
-
-} );
-
-/**
- * @author bhouston / http://clara.io
- */
-
-function Line3( start, end ) {
-
-	this.start = ( start !== undefined ) ? start : new Vector3();
-	this.end = ( end !== undefined ) ? end : new Vector3();
-
-}
-
-Object.assign( Line3.prototype, {
-
-	set: function ( start, end ) {
-
-		this.start.copy( start );
-		this.end.copy( end );
-
-		return this;
-
-	},
-
-	clone: function () {
-
-		return new this.constructor().copy( this );
-
-	},
-
-	copy: function ( line ) {
-
-		this.start.copy( line.start );
-		this.end.copy( line.end );
-
-		return this;
-
-	},
-
-	getCenter: function ( target ) {
-
-		if ( target === undefined ) {
-
-			console.warn( 'THREE.Line3: .getCenter() target is now required' );
-			target = new Vector3();
-
-		}
-
-		return target.addVectors( this.start, this.end ).multiplyScalar( 0.5 );
-
-	},
-
-	delta: function ( target ) {
-
-		if ( target === undefined ) {
-
-			console.warn( 'THREE.Line3: .delta() target is now required' );
-			target = new Vector3();
-
-		}
-
-		return target.subVectors( this.end, this.start );
-
-	},
-
-	distanceSq: function () {
-
-		return this.start.distanceToSquared( this.end );
-
-	},
-
-	distance: function () {
-
-		return this.start.distanceTo( this.end );
-
-	},
-
-	at: function ( t, target ) {
-
-		if ( target === undefined ) {
-
-			console.warn( 'THREE.Line3: .at() target is now required' );
-			target = new Vector3();
-
-		}
-
-		return this.delta( target ).multiplyScalar( t ).add( this.start );
-
-	},
-
-	closestPointToPointParameter: function () {
-
-		var startP = new Vector3();
-		var startEnd = new Vector3();
-
-		return function closestPointToPointParameter( point, clampToLine ) {
-
-			startP.subVectors( point, this.start );
-			startEnd.subVectors( this.end, this.start );
-
-			var startEnd2 = startEnd.dot( startEnd );
-			var startEnd_startP = startEnd.dot( startP );
-
-			var t = startEnd_startP / startEnd2;
-
-			if ( clampToLine ) {
-
-				t = _Math.clamp( t, 0, 1 );
-
-			}
-
-			return t;
-
-		};
-
-	}(),
-
-	closestPointToPoint: function ( point, clampToLine, target ) {
-
-		var t = this.closestPointToPointParameter( point, clampToLine );
-
-		if ( target === undefined ) {
-
-			console.warn( 'THREE.Line3: .closestPointToPoint() target is now required' );
-			target = new Vector3();
-
-		}
-
-		return this.delta( target ).multiplyScalar( t ).add( this.start );
-
-	},
-
-	applyMatrix4: function ( matrix ) {
-
-		this.start.applyMatrix4( matrix );
-		this.end.applyMatrix4( matrix );
-
-		return this;
-
-	},
-
-	equals: function ( line ) {
-
-		return line.start.equals( this.start ) && line.end.equals( this.end );
-
-	}
-
-} );
-
-/**
  * @author alteredq / http://alteredqualia.com/
  */
 
@@ -45334,123 +47543,6 @@ SpotLightHelper.prototype.update = function () {
 			this.cone.material.color.copy( this.light.color );
 
 		}
-
-	};
-
-}();
-
-/**
- * @author Sean Griffin / http://twitter.com/sgrif
- * @author Michael Guerrero / http://realitymeltdown.com
- * @author mrdoob / http://mrdoob.com/
- * @author ikerr / http://verold.com
- * @author Mugen87 / https://github.com/Mugen87
- */
-
-function getBoneList( object ) {
-
-	var boneList = [];
-
-	if ( object && object.isBone ) {
-
-		boneList.push( object );
-
-	}
-
-	for ( var i = 0; i < object.children.length; i ++ ) {
-
-		boneList.push.apply( boneList, getBoneList( object.children[ i ] ) );
-
-	}
-
-	return boneList;
-
-}
-
-function SkeletonHelper( object ) {
-
-	var bones = getBoneList( object );
-
-	var geometry = new BufferGeometry();
-
-	var vertices = [];
-	var colors = [];
-
-	var color1 = new Color( 0, 0, 1 );
-	var color2 = new Color( 0, 1, 0 );
-
-	for ( var i = 0; i < bones.length; i ++ ) {
-
-		var bone = bones[ i ];
-
-		if ( bone.parent && bone.parent.isBone ) {
-
-			vertices.push( 0, 0, 0 );
-			vertices.push( 0, 0, 0 );
-			colors.push( color1.r, color1.g, color1.b );
-			colors.push( color2.r, color2.g, color2.b );
-
-		}
-
-	}
-
-	geometry.addAttribute( 'position', new Float32BufferAttribute( vertices, 3 ) );
-	geometry.addAttribute( 'color', new Float32BufferAttribute( colors, 3 ) );
-
-	var material = new LineBasicMaterial( { vertexColors: VertexColors, depthTest: false, depthWrite: false, transparent: true } );
-
-	LineSegments.call( this, geometry, material );
-
-	this.root = object;
-	this.bones = bones;
-
-	this.matrix = object.matrixWorld;
-	this.matrixAutoUpdate = false;
-
-}
-
-SkeletonHelper.prototype = Object.create( LineSegments.prototype );
-SkeletonHelper.prototype.constructor = SkeletonHelper;
-
-SkeletonHelper.prototype.updateMatrixWorld = function () {
-
-	var vector = new Vector3();
-
-	var boneMatrix = new Matrix4();
-	var matrixWorldInv = new Matrix4();
-
-	return function updateMatrixWorld( force ) {
-
-		var bones = this.bones;
-
-		var geometry = this.geometry;
-		var position = geometry.getAttribute( 'position' );
-
-		matrixWorldInv.getInverse( this.root.matrixWorld );
-
-		for ( var i = 0, j = 0; i < bones.length; i ++ ) {
-
-			var bone = bones[ i ];
-
-			if ( bone.parent && bone.parent.isBone ) {
-
-				boneMatrix.multiplyMatrices( matrixWorldInv, bone.matrixWorld );
-				vector.setFromMatrixPosition( boneMatrix );
-				position.setXYZ( j, vector.x, vector.y, vector.z );
-
-				boneMatrix.multiplyMatrices( matrixWorldInv, bone.parent.matrixWorld );
-				vector.setFromMatrixPosition( boneMatrix );
-				position.setXYZ( j + 1, vector.x, vector.y, vector.z );
-
-				j += 2;
-
-			}
-
-		}
-
-		geometry.getAttribute( 'position' ).needsUpdate = true;
-
-		Object3D.prototype.updateMatrixWorld.call( this, force );
 
 	};
 
@@ -45852,70 +47944,6 @@ LightProbeHelper.prototype.onBeforeRender = function () {
 	};
 
 }();
-
-/**
- * @author mrdoob / http://mrdoob.com/
- */
-
-function GridHelper( size, divisions, color1, color2 ) {
-
-	size = size || 10;
-	divisions = divisions || 10;
-	color1 = new Color( color1 !== undefined ? color1 : 0x444444 );
-	color2 = new Color( color2 !== undefined ? color2 : 0x888888 );
-
-	var center = divisions / 2;
-	var step = size / divisions;
-	var halfSize = size / 2;
-
-	var vertices = [], colors = [];
-
-	for ( var i = 0, j = 0, k = - halfSize; i <= divisions; i ++, k += step ) {
-
-		vertices.push( - halfSize, 0, k, halfSize, 0, k );
-		vertices.push( k, 0, - halfSize, k, 0, halfSize );
-
-		var color = i === center ? color1 : color2;
-
-		color.toArray( colors, j ); j += 3;
-		color.toArray( colors, j ); j += 3;
-		color.toArray( colors, j ); j += 3;
-		color.toArray( colors, j ); j += 3;
-
-	}
-
-	var geometry = new BufferGeometry();
-	geometry.addAttribute( 'position', new Float32BufferAttribute( vertices, 3 ) );
-	geometry.addAttribute( 'color', new Float32BufferAttribute( colors, 3 ) );
-
-	var material = new LineBasicMaterial( { vertexColors: VertexColors } );
-
-	LineSegments.call( this, geometry, material );
-
-}
-
-GridHelper.prototype = Object.assign( Object.create( LineSegments.prototype ), {
-
-	constructor: GridHelper,
-
-	copy: function ( source ) {
-
-		LineSegments.prototype.copy.call( this, source );
-
-		this.geometry.copy( source.geometry );
-		this.material.copy( source.material );
-
-		return this;
-
-	},
-
-	clone: function () {
-
-		return new this.constructor().copy( this );
-
-	}
-
-} );
 
 /**
  * @author mrdoob / http://mrdoob.com/
@@ -46502,119 +48530,6 @@ CameraHelper.prototype.update = function () {
 }();
 
 /**
- * @author mrdoob / http://mrdoob.com/
- * @author Mugen87 / http://github.com/Mugen87
- */
-
-function BoxHelper( object, color ) {
-
-	this.object = object;
-
-	if ( color === undefined ) color = 0xffff00;
-
-	var indices = new Uint16Array( [ 0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7 ] );
-	var positions = new Float32Array( 8 * 3 );
-
-	var geometry = new BufferGeometry();
-	geometry.setIndex( new BufferAttribute( indices, 1 ) );
-	geometry.addAttribute( 'position', new BufferAttribute( positions, 3 ) );
-
-	LineSegments.call( this, geometry, new LineBasicMaterial( { color: color } ) );
-
-	this.matrixAutoUpdate = false;
-
-	this.update();
-
-}
-
-BoxHelper.prototype = Object.create( LineSegments.prototype );
-BoxHelper.prototype.constructor = BoxHelper;
-
-BoxHelper.prototype.update = ( function () {
-
-	var box = new Box3();
-
-	return function update( object ) {
-
-		if ( object !== undefined ) {
-
-			console.warn( 'THREE.BoxHelper: .update() has no longer arguments.' );
-
-		}
-
-		if ( this.object !== undefined ) {
-
-			box.setFromObject( this.object );
-
-		}
-
-		if ( box.isEmpty() ) return;
-
-		var min = box.min;
-		var max = box.max;
-
-		/*
-		  5____4
-		1/___0/|
-		| 6__|_7
-		2/___3/
-
-		0: max.x, max.y, max.z
-		1: min.x, max.y, max.z
-		2: min.x, min.y, max.z
-		3: max.x, min.y, max.z
-		4: max.x, max.y, min.z
-		5: min.x, max.y, min.z
-		6: min.x, min.y, min.z
-		7: max.x, min.y, min.z
-		*/
-
-		var position = this.geometry.attributes.position;
-		var array = position.array;
-
-		array[ 0 ] = max.x; array[ 1 ] = max.y; array[ 2 ] = max.z;
-		array[ 3 ] = min.x; array[ 4 ] = max.y; array[ 5 ] = max.z;
-		array[ 6 ] = min.x; array[ 7 ] = min.y; array[ 8 ] = max.z;
-		array[ 9 ] = max.x; array[ 10 ] = min.y; array[ 11 ] = max.z;
-		array[ 12 ] = max.x; array[ 13 ] = max.y; array[ 14 ] = min.z;
-		array[ 15 ] = min.x; array[ 16 ] = max.y; array[ 17 ] = min.z;
-		array[ 18 ] = min.x; array[ 19 ] = min.y; array[ 20 ] = min.z;
-		array[ 21 ] = max.x; array[ 22 ] = min.y; array[ 23 ] = min.z;
-
-		position.needsUpdate = true;
-
-		this.geometry.computeBoundingSphere();
-
-	};
-
-} )();
-
-BoxHelper.prototype.setFromObject = function ( object ) {
-
-	this.object = object;
-	this.update();
-
-	return this;
-
-};
-
-BoxHelper.prototype.copy = function ( source ) {
-
-	LineSegments.prototype.copy.call( this, source );
-
-	this.object = source.object;
-
-	return this;
-
-};
-
-BoxHelper.prototype.clone = function () {
-
-	return new this.constructor().copy( this );
-
-};
-
-/**
  * @author WestLangley / http://github.com/WestLangley
  */
 
@@ -46841,1896 +48756,6 @@ ArrowHelper.prototype.clone = function () {
 	return new this.constructor().copy( this );
 
 };
-
-/**
- * @author sroucheray / http://sroucheray.org/
- * @author mrdoob / http://mrdoob.com/
- */
-
-function AxesHelper( size ) {
-
-	size = size || 1;
-
-	var vertices = [
-		0, 0, 0,	size, 0, 0,
-		0, 0, 0,	0, size, 0,
-		0, 0, 0,	0, 0, size
-	];
-
-	var colors = [
-		1, 0, 0,	1, 0.6, 0,
-		0, 1, 0,	0.6, 1, 0,
-		0, 0, 1,	0, 0.6, 1
-	];
-
-	var geometry = new BufferGeometry();
-	geometry.addAttribute( 'position', new Float32BufferAttribute( vertices, 3 ) );
-	geometry.addAttribute( 'color', new Float32BufferAttribute( colors, 3 ) );
-
-	var material = new LineBasicMaterial( { vertexColors: VertexColors } );
-
-	LineSegments.call( this, geometry, material );
-
-}
-
-AxesHelper.prototype = Object.create( LineSegments.prototype );
-AxesHelper.prototype.constructor = AxesHelper;
-
-/**
- * @author mrdoob / http://mrdoob.com/
- */
-
-function Face4( a, b, c, d, normal, color, materialIndex ) {
-
-	console.warn( 'THREE.Face4 has been removed. A THREE.Face3 will be created instead.' );
-	return new Face3( a, b, c, normal, color, materialIndex );
-
-}
-
-var LineStrip = 0;
-
-var LinePieces = 1;
-
-function MeshFaceMaterial( materials ) {
-
-	console.warn( 'THREE.MeshFaceMaterial has been removed. Use an Array instead.' );
-	return materials;
-
-}
-
-function MultiMaterial( materials ) {
-
-	if ( materials === undefined ) materials = [];
-
-	console.warn( 'THREE.MultiMaterial has been removed. Use an Array instead.' );
-	materials.isMultiMaterial = true;
-	materials.materials = materials;
-	materials.clone = function () {
-
-		return materials.slice();
-
-	};
-	return materials;
-
-}
-
-function PointCloud( geometry, material ) {
-
-	console.warn( 'THREE.PointCloud has been renamed to THREE.Points.' );
-	return new Points( geometry, material );
-
-}
-
-function Particle( material ) {
-
-	console.warn( 'THREE.Particle has been renamed to THREE.Sprite.' );
-	return new Sprite( material );
-
-}
-
-function ParticleSystem( geometry, material ) {
-
-	console.warn( 'THREE.ParticleSystem has been renamed to THREE.Points.' );
-	return new Points( geometry, material );
-
-}
-
-function PointCloudMaterial( parameters ) {
-
-	console.warn( 'THREE.PointCloudMaterial has been renamed to THREE.PointsMaterial.' );
-	return new PointsMaterial( parameters );
-
-}
-
-function ParticleBasicMaterial( parameters ) {
-
-	console.warn( 'THREE.ParticleBasicMaterial has been renamed to THREE.PointsMaterial.' );
-	return new PointsMaterial( parameters );
-
-}
-
-function ParticleSystemMaterial( parameters ) {
-
-	console.warn( 'THREE.ParticleSystemMaterial has been renamed to THREE.PointsMaterial.' );
-	return new PointsMaterial( parameters );
-
-}
-
-function Vertex( x, y, z ) {
-
-	console.warn( 'THREE.Vertex has been removed. Use THREE.Vector3 instead.' );
-	return new Vector3( x, y, z );
-
-}
-
-//
-
-function DynamicBufferAttribute( array, itemSize ) {
-
-	console.warn( 'THREE.DynamicBufferAttribute has been removed. Use new THREE.BufferAttribute().setDynamic( true ) instead.' );
-	return new BufferAttribute( array, itemSize ).setDynamic( true );
-
-}
-
-function Int8Attribute( array, itemSize ) {
-
-	console.warn( 'THREE.Int8Attribute has been removed. Use new THREE.Int8BufferAttribute() instead.' );
-	return new Int8BufferAttribute( array, itemSize );
-
-}
-
-function Uint8Attribute( array, itemSize ) {
-
-	console.warn( 'THREE.Uint8Attribute has been removed. Use new THREE.Uint8BufferAttribute() instead.' );
-	return new Uint8BufferAttribute( array, itemSize );
-
-}
-
-function Uint8ClampedAttribute( array, itemSize ) {
-
-	console.warn( 'THREE.Uint8ClampedAttribute has been removed. Use new THREE.Uint8ClampedBufferAttribute() instead.' );
-	return new Uint8ClampedBufferAttribute( array, itemSize );
-
-}
-
-function Int16Attribute( array, itemSize ) {
-
-	console.warn( 'THREE.Int16Attribute has been removed. Use new THREE.Int16BufferAttribute() instead.' );
-	return new Int16BufferAttribute( array, itemSize );
-
-}
-
-function Uint16Attribute( array, itemSize ) {
-
-	console.warn( 'THREE.Uint16Attribute has been removed. Use new THREE.Uint16BufferAttribute() instead.' );
-	return new Uint16BufferAttribute( array, itemSize );
-
-}
-
-function Int32Attribute( array, itemSize ) {
-
-	console.warn( 'THREE.Int32Attribute has been removed. Use new THREE.Int32BufferAttribute() instead.' );
-	return new Int32BufferAttribute( array, itemSize );
-
-}
-
-function Uint32Attribute( array, itemSize ) {
-
-	console.warn( 'THREE.Uint32Attribute has been removed. Use new THREE.Uint32BufferAttribute() instead.' );
-	return new Uint32BufferAttribute( array, itemSize );
-
-}
-
-function Float32Attribute( array, itemSize ) {
-
-	console.warn( 'THREE.Float32Attribute has been removed. Use new THREE.Float32BufferAttribute() instead.' );
-	return new Float32BufferAttribute( array, itemSize );
-
-}
-
-function Float64Attribute( array, itemSize ) {
-
-	console.warn( 'THREE.Float64Attribute has been removed. Use new THREE.Float64BufferAttribute() instead.' );
-	return new Float64BufferAttribute( array, itemSize );
-
-}
-
-//
-
-Curve.create = function ( construct, getPoint ) {
-
-	console.log( 'THREE.Curve.create() has been deprecated' );
-
-	construct.prototype = Object.create( Curve.prototype );
-	construct.prototype.constructor = construct;
-	construct.prototype.getPoint = getPoint;
-
-	return construct;
-
-};
-
-//
-
-Object.assign( CurvePath.prototype, {
-
-	createPointsGeometry: function ( divisions ) {
-
-		console.warn( 'THREE.CurvePath: .createPointsGeometry() has been removed. Use new THREE.Geometry().setFromPoints( points ) instead.' );
-
-		// generate geometry from path points (for Line or Points objects)
-
-		var pts = this.getPoints( divisions );
-		return this.createGeometry( pts );
-
-	},
-
-	createSpacedPointsGeometry: function ( divisions ) {
-
-		console.warn( 'THREE.CurvePath: .createSpacedPointsGeometry() has been removed. Use new THREE.Geometry().setFromPoints( points ) instead.' );
-
-		// generate geometry from equidistant sampling along the path
-
-		var pts = this.getSpacedPoints( divisions );
-		return this.createGeometry( pts );
-
-	},
-
-	createGeometry: function ( points ) {
-
-		console.warn( 'THREE.CurvePath: .createGeometry() has been removed. Use new THREE.Geometry().setFromPoints( points ) instead.' );
-
-		var geometry = new Geometry();
-
-		for ( var i = 0, l = points.length; i < l; i ++ ) {
-
-			var point = points[ i ];
-			geometry.vertices.push( new Vector3( point.x, point.y, point.z || 0 ) );
-
-		}
-
-		return geometry;
-
-	}
-
-} );
-
-//
-
-Object.assign( Path.prototype, {
-
-	fromPoints: function ( points ) {
-
-		console.warn( 'THREE.Path: .fromPoints() has been renamed to .setFromPoints().' );
-		this.setFromPoints( points );
-
-	}
-
-} );
-
-//
-
-function ClosedSplineCurve3( points ) {
-
-	console.warn( 'THREE.ClosedSplineCurve3 has been deprecated. Use THREE.CatmullRomCurve3 instead.' );
-
-	CatmullRomCurve3.call( this, points );
-	this.type = 'catmullrom';
-	this.closed = true;
-
-}
-
-ClosedSplineCurve3.prototype = Object.create( CatmullRomCurve3.prototype );
-
-//
-
-function SplineCurve3( points ) {
-
-	console.warn( 'THREE.SplineCurve3 has been deprecated. Use THREE.CatmullRomCurve3 instead.' );
-
-	CatmullRomCurve3.call( this, points );
-	this.type = 'catmullrom';
-
-}
-
-SplineCurve3.prototype = Object.create( CatmullRomCurve3.prototype );
-
-//
-
-function Spline( points ) {
-
-	console.warn( 'THREE.Spline has been removed. Use THREE.CatmullRomCurve3 instead.' );
-
-	CatmullRomCurve3.call( this, points );
-	this.type = 'catmullrom';
-
-}
-
-Spline.prototype = Object.create( CatmullRomCurve3.prototype );
-
-Object.assign( Spline.prototype, {
-
-	initFromArray: function ( /* a */ ) {
-
-		console.error( 'THREE.Spline: .initFromArray() has been removed.' );
-
-	},
-	getControlPointsArray: function ( /* optionalTarget */ ) {
-
-		console.error( 'THREE.Spline: .getControlPointsArray() has been removed.' );
-
-	},
-	reparametrizeByArcLength: function ( /* samplingCoef */ ) {
-
-		console.error( 'THREE.Spline: .reparametrizeByArcLength() has been removed.' );
-
-	}
-
-} );
-
-//
-
-function AxisHelper( size ) {
-
-	console.warn( 'THREE.AxisHelper has been renamed to THREE.AxesHelper.' );
-	return new AxesHelper( size );
-
-}
-
-function BoundingBoxHelper( object, color ) {
-
-	console.warn( 'THREE.BoundingBoxHelper has been deprecated. Creating a THREE.BoxHelper instead.' );
-	return new BoxHelper( object, color );
-
-}
-
-function EdgesHelper( object, hex ) {
-
-	console.warn( 'THREE.EdgesHelper has been removed. Use THREE.EdgesGeometry instead.' );
-	return new LineSegments( new EdgesGeometry( object.geometry ), new LineBasicMaterial( { color: hex !== undefined ? hex : 0xffffff } ) );
-
-}
-
-GridHelper.prototype.setColors = function () {
-
-	console.error( 'THREE.GridHelper: setColors() has been deprecated, pass them in the constructor instead.' );
-
-};
-
-SkeletonHelper.prototype.update = function () {
-
-	console.error( 'THREE.SkeletonHelper: update() no longer needs to be called.' );
-
-};
-
-function WireframeHelper( object, hex ) {
-
-	console.warn( 'THREE.WireframeHelper has been removed. Use THREE.WireframeGeometry instead.' );
-	return new LineSegments( new WireframeGeometry( object.geometry ), new LineBasicMaterial( { color: hex !== undefined ? hex : 0xffffff } ) );
-
-}
-
-//
-
-Object.assign( Loader.prototype, {
-
-	extractUrlBase: function ( url ) {
-
-		console.warn( 'THREE.Loader: .extractUrlBase() has been deprecated. Use THREE.LoaderUtils.extractUrlBase() instead.' );
-		return LoaderUtils.extractUrlBase( url );
-
-	}
-
-} );
-
-function XHRLoader( manager ) {
-
-	console.warn( 'THREE.XHRLoader has been renamed to THREE.FileLoader.' );
-	return new FileLoader( manager );
-
-}
-
-function BinaryTextureLoader( manager ) {
-
-	console.warn( 'THREE.BinaryTextureLoader has been renamed to THREE.DataTextureLoader.' );
-	return new DataTextureLoader( manager );
-
-}
-
-Object.assign( ObjectLoader.prototype, {
-
-	setTexturePath: function ( value ) {
-
-		console.warn( 'THREE.ObjectLoader: .setTexturePath() has been renamed to .setResourcePath().' );
-		return this.setResourcePath( value );
-
-	}
-
-} );
-
-//
-
-Object.assign( Box2.prototype, {
-
-	center: function ( optionalTarget ) {
-
-		console.warn( 'THREE.Box2: .center() has been renamed to .getCenter().' );
-		return this.getCenter( optionalTarget );
-
-	},
-	empty: function () {
-
-		console.warn( 'THREE.Box2: .empty() has been renamed to .isEmpty().' );
-		return this.isEmpty();
-
-	},
-	isIntersectionBox: function ( box ) {
-
-		console.warn( 'THREE.Box2: .isIntersectionBox() has been renamed to .intersectsBox().' );
-		return this.intersectsBox( box );
-
-	},
-	size: function ( optionalTarget ) {
-
-		console.warn( 'THREE.Box2: .size() has been renamed to .getSize().' );
-		return this.getSize( optionalTarget );
-
-	}
-} );
-
-Object.assign( Box3.prototype, {
-
-	center: function ( optionalTarget ) {
-
-		console.warn( 'THREE.Box3: .center() has been renamed to .getCenter().' );
-		return this.getCenter( optionalTarget );
-
-	},
-	empty: function () {
-
-		console.warn( 'THREE.Box3: .empty() has been renamed to .isEmpty().' );
-		return this.isEmpty();
-
-	},
-	isIntersectionBox: function ( box ) {
-
-		console.warn( 'THREE.Box3: .isIntersectionBox() has been renamed to .intersectsBox().' );
-		return this.intersectsBox( box );
-
-	},
-	isIntersectionSphere: function ( sphere ) {
-
-		console.warn( 'THREE.Box3: .isIntersectionSphere() has been renamed to .intersectsSphere().' );
-		return this.intersectsSphere( sphere );
-
-	},
-	size: function ( optionalTarget ) {
-
-		console.warn( 'THREE.Box3: .size() has been renamed to .getSize().' );
-		return this.getSize( optionalTarget );
-
-	}
-} );
-
-Line3.prototype.center = function ( optionalTarget ) {
-
-	console.warn( 'THREE.Line3: .center() has been renamed to .getCenter().' );
-	return this.getCenter( optionalTarget );
-
-};
-
-Object.assign( _Math, {
-
-	random16: function () {
-
-		console.warn( 'THREE.Math: .random16() has been deprecated. Use Math.random() instead.' );
-		return Math.random();
-
-	},
-
-	nearestPowerOfTwo: function ( value ) {
-
-		console.warn( 'THREE.Math: .nearestPowerOfTwo() has been renamed to .floorPowerOfTwo().' );
-		return _Math.floorPowerOfTwo( value );
-
-	},
-
-	nextPowerOfTwo: function ( value ) {
-
-		console.warn( 'THREE.Math: .nextPowerOfTwo() has been renamed to .ceilPowerOfTwo().' );
-		return _Math.ceilPowerOfTwo( value );
-
-	}
-
-} );
-
-Object.assign( Matrix3.prototype, {
-
-	flattenToArrayOffset: function ( array, offset ) {
-
-		console.warn( "THREE.Matrix3: .flattenToArrayOffset() has been deprecated. Use .toArray() instead." );
-		return this.toArray( array, offset );
-
-	},
-	multiplyVector3: function ( vector ) {
-
-		console.warn( 'THREE.Matrix3: .multiplyVector3() has been removed. Use vector.applyMatrix3( matrix ) instead.' );
-		return vector.applyMatrix3( this );
-
-	},
-	multiplyVector3Array: function ( /* a */ ) {
-
-		console.error( 'THREE.Matrix3: .multiplyVector3Array() has been removed.' );
-
-	},
-	applyToBuffer: function ( buffer /*, offset, length */ ) {
-
-		console.warn( 'THREE.Matrix3: .applyToBuffer() has been removed. Use matrix.applyToBufferAttribute( attribute ) instead.' );
-		return this.applyToBufferAttribute( buffer );
-
-	},
-	applyToVector3Array: function ( /* array, offset, length */ ) {
-
-		console.error( 'THREE.Matrix3: .applyToVector3Array() has been removed.' );
-
-	}
-
-} );
-
-Object.assign( Matrix4.prototype, {
-
-	extractPosition: function ( m ) {
-
-		console.warn( 'THREE.Matrix4: .extractPosition() has been renamed to .copyPosition().' );
-		return this.copyPosition( m );
-
-	},
-	flattenToArrayOffset: function ( array, offset ) {
-
-		console.warn( "THREE.Matrix4: .flattenToArrayOffset() has been deprecated. Use .toArray() instead." );
-		return this.toArray( array, offset );
-
-	},
-	getPosition: function () {
-
-		var v1;
-
-		return function getPosition() {
-
-			if ( v1 === undefined ) v1 = new Vector3();
-			console.warn( 'THREE.Matrix4: .getPosition() has been removed. Use Vector3.setFromMatrixPosition( matrix ) instead.' );
-			return v1.setFromMatrixColumn( this, 3 );
-
-		};
-
-	}(),
-	setRotationFromQuaternion: function ( q ) {
-
-		console.warn( 'THREE.Matrix4: .setRotationFromQuaternion() has been renamed to .makeRotationFromQuaternion().' );
-		return this.makeRotationFromQuaternion( q );
-
-	},
-	multiplyToArray: function () {
-
-		console.warn( 'THREE.Matrix4: .multiplyToArray() has been removed.' );
-
-	},
-	multiplyVector3: function ( vector ) {
-
-		console.warn( 'THREE.Matrix4: .multiplyVector3() has been removed. Use vector.applyMatrix4( matrix ) instead.' );
-		return vector.applyMatrix4( this );
-
-	},
-	multiplyVector4: function ( vector ) {
-
-		console.warn( 'THREE.Matrix4: .multiplyVector4() has been removed. Use vector.applyMatrix4( matrix ) instead.' );
-		return vector.applyMatrix4( this );
-
-	},
-	multiplyVector3Array: function ( /* a */ ) {
-
-		console.error( 'THREE.Matrix4: .multiplyVector3Array() has been removed.' );
-
-	},
-	rotateAxis: function ( v ) {
-
-		console.warn( 'THREE.Matrix4: .rotateAxis() has been removed. Use Vector3.transformDirection( matrix ) instead.' );
-		v.transformDirection( this );
-
-	},
-	crossVector: function ( vector ) {
-
-		console.warn( 'THREE.Matrix4: .crossVector() has been removed. Use vector.applyMatrix4( matrix ) instead.' );
-		return vector.applyMatrix4( this );
-
-	},
-	translate: function () {
-
-		console.error( 'THREE.Matrix4: .translate() has been removed.' );
-
-	},
-	rotateX: function () {
-
-		console.error( 'THREE.Matrix4: .rotateX() has been removed.' );
-
-	},
-	rotateY: function () {
-
-		console.error( 'THREE.Matrix4: .rotateY() has been removed.' );
-
-	},
-	rotateZ: function () {
-
-		console.error( 'THREE.Matrix4: .rotateZ() has been removed.' );
-
-	},
-	rotateByAxis: function () {
-
-		console.error( 'THREE.Matrix4: .rotateByAxis() has been removed.' );
-
-	},
-	applyToBuffer: function ( buffer /*, offset, length */ ) {
-
-		console.warn( 'THREE.Matrix4: .applyToBuffer() has been removed. Use matrix.applyToBufferAttribute( attribute ) instead.' );
-		return this.applyToBufferAttribute( buffer );
-
-	},
-	applyToVector3Array: function ( /* array, offset, length */ ) {
-
-		console.error( 'THREE.Matrix4: .applyToVector3Array() has been removed.' );
-
-	},
-	makeFrustum: function ( left, right, bottom, top, near, far ) {
-
-		console.warn( 'THREE.Matrix4: .makeFrustum() has been removed. Use .makePerspective( left, right, top, bottom, near, far ) instead.' );
-		return this.makePerspective( left, right, top, bottom, near, far );
-
-	}
-
-} );
-
-Plane.prototype.isIntersectionLine = function ( line ) {
-
-	console.warn( 'THREE.Plane: .isIntersectionLine() has been renamed to .intersectsLine().' );
-	return this.intersectsLine( line );
-
-};
-
-Quaternion.prototype.multiplyVector3 = function ( vector ) {
-
-	console.warn( 'THREE.Quaternion: .multiplyVector3() has been removed. Use is now vector.applyQuaternion( quaternion ) instead.' );
-	return vector.applyQuaternion( this );
-
-};
-
-Object.assign( Ray.prototype, {
-
-	isIntersectionBox: function ( box ) {
-
-		console.warn( 'THREE.Ray: .isIntersectionBox() has been renamed to .intersectsBox().' );
-		return this.intersectsBox( box );
-
-	},
-	isIntersectionPlane: function ( plane ) {
-
-		console.warn( 'THREE.Ray: .isIntersectionPlane() has been renamed to .intersectsPlane().' );
-		return this.intersectsPlane( plane );
-
-	},
-	isIntersectionSphere: function ( sphere ) {
-
-		console.warn( 'THREE.Ray: .isIntersectionSphere() has been renamed to .intersectsSphere().' );
-		return this.intersectsSphere( sphere );
-
-	}
-
-} );
-
-Object.assign( Triangle.prototype, {
-
-	area: function () {
-
-		console.warn( 'THREE.Triangle: .area() has been renamed to .getArea().' );
-		return this.getArea();
-
-	},
-	barycoordFromPoint: function ( point, target ) {
-
-		console.warn( 'THREE.Triangle: .barycoordFromPoint() has been renamed to .getBarycoord().' );
-		return this.getBarycoord( point, target );
-
-	},
-	midpoint: function ( target ) {
-
-		console.warn( 'THREE.Triangle: .midpoint() has been renamed to .getMidpoint().' );
-		return this.getMidpoint( target );
-
-	},
-	normal: function ( target ) {
-
-		console.warn( 'THREE.Triangle: .normal() has been renamed to .getNormal().' );
-		return this.getNormal( target );
-
-	},
-	plane: function ( target ) {
-
-		console.warn( 'THREE.Triangle: .plane() has been renamed to .getPlane().' );
-		return this.getPlane( target );
-
-	}
-
-} );
-
-Object.assign( Triangle, {
-
-	barycoordFromPoint: function ( point, a, b, c, target ) {
-
-		console.warn( 'THREE.Triangle: .barycoordFromPoint() has been renamed to .getBarycoord().' );
-		return Triangle.getBarycoord( point, a, b, c, target );
-
-	},
-	normal: function ( a, b, c, target ) {
-
-		console.warn( 'THREE.Triangle: .normal() has been renamed to .getNormal().' );
-		return Triangle.getNormal( a, b, c, target );
-
-	}
-
-} );
-
-Object.assign( Shape.prototype, {
-
-	extractAllPoints: function ( divisions ) {
-
-		console.warn( 'THREE.Shape: .extractAllPoints() has been removed. Use .extractPoints() instead.' );
-		return this.extractPoints( divisions );
-
-	},
-	extrude: function ( options ) {
-
-		console.warn( 'THREE.Shape: .extrude() has been removed. Use ExtrudeGeometry() instead.' );
-		return new ExtrudeGeometry( this, options );
-
-	},
-	makeGeometry: function ( options ) {
-
-		console.warn( 'THREE.Shape: .makeGeometry() has been removed. Use ShapeGeometry() instead.' );
-		return new ShapeGeometry( this, options );
-
-	}
-
-} );
-
-Object.assign( Vector2.prototype, {
-
-	fromAttribute: function ( attribute, index, offset ) {
-
-		console.warn( 'THREE.Vector2: .fromAttribute() has been renamed to .fromBufferAttribute().' );
-		return this.fromBufferAttribute( attribute, index, offset );
-
-	},
-	distanceToManhattan: function ( v ) {
-
-		console.warn( 'THREE.Vector2: .distanceToManhattan() has been renamed to .manhattanDistanceTo().' );
-		return this.manhattanDistanceTo( v );
-
-	},
-	lengthManhattan: function () {
-
-		console.warn( 'THREE.Vector2: .lengthManhattan() has been renamed to .manhattanLength().' );
-		return this.manhattanLength();
-
-	}
-
-} );
-
-Object.assign( Vector3.prototype, {
-
-	setEulerFromRotationMatrix: function () {
-
-		console.error( 'THREE.Vector3: .setEulerFromRotationMatrix() has been removed. Use Euler.setFromRotationMatrix() instead.' );
-
-	},
-	setEulerFromQuaternion: function () {
-
-		console.error( 'THREE.Vector3: .setEulerFromQuaternion() has been removed. Use Euler.setFromQuaternion() instead.' );
-
-	},
-	getPositionFromMatrix: function ( m ) {
-
-		console.warn( 'THREE.Vector3: .getPositionFromMatrix() has been renamed to .setFromMatrixPosition().' );
-		return this.setFromMatrixPosition( m );
-
-	},
-	getScaleFromMatrix: function ( m ) {
-
-		console.warn( 'THREE.Vector3: .getScaleFromMatrix() has been renamed to .setFromMatrixScale().' );
-		return this.setFromMatrixScale( m );
-
-	},
-	getColumnFromMatrix: function ( index, matrix ) {
-
-		console.warn( 'THREE.Vector3: .getColumnFromMatrix() has been renamed to .setFromMatrixColumn().' );
-		return this.setFromMatrixColumn( matrix, index );
-
-	},
-	applyProjection: function ( m ) {
-
-		console.warn( 'THREE.Vector3: .applyProjection() has been removed. Use .applyMatrix4( m ) instead.' );
-		return this.applyMatrix4( m );
-
-	},
-	fromAttribute: function ( attribute, index, offset ) {
-
-		console.warn( 'THREE.Vector3: .fromAttribute() has been renamed to .fromBufferAttribute().' );
-		return this.fromBufferAttribute( attribute, index, offset );
-
-	},
-	distanceToManhattan: function ( v ) {
-
-		console.warn( 'THREE.Vector3: .distanceToManhattan() has been renamed to .manhattanDistanceTo().' );
-		return this.manhattanDistanceTo( v );
-
-	},
-	lengthManhattan: function () {
-
-		console.warn( 'THREE.Vector3: .lengthManhattan() has been renamed to .manhattanLength().' );
-		return this.manhattanLength();
-
-	}
-
-} );
-
-Object.assign( Vector4.prototype, {
-
-	fromAttribute: function ( attribute, index, offset ) {
-
-		console.warn( 'THREE.Vector4: .fromAttribute() has been renamed to .fromBufferAttribute().' );
-		return this.fromBufferAttribute( attribute, index, offset );
-
-	},
-	lengthManhattan: function () {
-
-		console.warn( 'THREE.Vector4: .lengthManhattan() has been renamed to .manhattanLength().' );
-		return this.manhattanLength();
-
-	}
-
-} );
-
-//
-
-Object.assign( Geometry.prototype, {
-
-	computeTangents: function () {
-
-		console.error( 'THREE.Geometry: .computeTangents() has been removed.' );
-
-	},
-	computeLineDistances: function () {
-
-		console.error( 'THREE.Geometry: .computeLineDistances() has been removed. Use THREE.Line.computeLineDistances() instead.' );
-
-	}
-
-} );
-
-Object.assign( Object3D.prototype, {
-
-	getChildByName: function ( name ) {
-
-		console.warn( 'THREE.Object3D: .getChildByName() has been renamed to .getObjectByName().' );
-		return this.getObjectByName( name );
-
-	},
-	renderDepth: function () {
-
-		console.warn( 'THREE.Object3D: .renderDepth has been removed. Use .renderOrder, instead.' );
-
-	},
-	translate: function ( distance, axis ) {
-
-		console.warn( 'THREE.Object3D: .translate() has been removed. Use .translateOnAxis( axis, distance ) instead.' );
-		return this.translateOnAxis( axis, distance );
-
-	},
-	getWorldRotation: function () {
-
-		console.error( 'THREE.Object3D: .getWorldRotation() has been removed. Use THREE.Object3D.getWorldQuaternion( target ) instead.' );
-
-	}
-
-} );
-
-Object.defineProperties( Object3D.prototype, {
-
-	eulerOrder: {
-		get: function () {
-
-			console.warn( 'THREE.Object3D: .eulerOrder is now .rotation.order.' );
-			return this.rotation.order;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.Object3D: .eulerOrder is now .rotation.order.' );
-			this.rotation.order = value;
-
-		}
-	},
-	useQuaternion: {
-		get: function () {
-
-			console.warn( 'THREE.Object3D: .useQuaternion has been removed. The library now uses quaternions by default.' );
-
-		},
-		set: function () {
-
-			console.warn( 'THREE.Object3D: .useQuaternion has been removed. The library now uses quaternions by default.' );
-
-		}
-	}
-
-} );
-
-Object.defineProperties( LOD.prototype, {
-
-	objects: {
-		get: function () {
-
-			console.warn( 'THREE.LOD: .objects has been renamed to .levels.' );
-			return this.levels;
-
-		}
-	}
-
-} );
-
-Object.defineProperty( Skeleton.prototype, 'useVertexTexture', {
-
-	get: function () {
-
-		console.warn( 'THREE.Skeleton: useVertexTexture has been removed.' );
-
-	},
-	set: function () {
-
-		console.warn( 'THREE.Skeleton: useVertexTexture has been removed.' );
-
-	}
-
-} );
-
-SkinnedMesh.prototype.initBones = function () {
-
-	console.error( 'THREE.SkinnedMesh: initBones() has been removed.' );
-
-};
-
-Object.defineProperty( Curve.prototype, '__arcLengthDivisions', {
-
-	get: function () {
-
-		console.warn( 'THREE.Curve: .__arcLengthDivisions is now .arcLengthDivisions.' );
-		return this.arcLengthDivisions;
-
-	},
-	set: function ( value ) {
-
-		console.warn( 'THREE.Curve: .__arcLengthDivisions is now .arcLengthDivisions.' );
-		this.arcLengthDivisions = value;
-
-	}
-
-} );
-
-//
-
-PerspectiveCamera.prototype.setLens = function ( focalLength, filmGauge ) {
-
-	console.warn( "THREE.PerspectiveCamera.setLens is deprecated. " +
-			"Use .setFocalLength and .filmGauge for a photographic setup." );
-
-	if ( filmGauge !== undefined ) this.filmGauge = filmGauge;
-	this.setFocalLength( focalLength );
-
-};
-
-//
-
-Object.defineProperties( Light.prototype, {
-	onlyShadow: {
-		set: function () {
-
-			console.warn( 'THREE.Light: .onlyShadow has been removed.' );
-
-		}
-	},
-	shadowCameraFov: {
-		set: function ( value ) {
-
-			console.warn( 'THREE.Light: .shadowCameraFov is now .shadow.camera.fov.' );
-			this.shadow.camera.fov = value;
-
-		}
-	},
-	shadowCameraLeft: {
-		set: function ( value ) {
-
-			console.warn( 'THREE.Light: .shadowCameraLeft is now .shadow.camera.left.' );
-			this.shadow.camera.left = value;
-
-		}
-	},
-	shadowCameraRight: {
-		set: function ( value ) {
-
-			console.warn( 'THREE.Light: .shadowCameraRight is now .shadow.camera.right.' );
-			this.shadow.camera.right = value;
-
-		}
-	},
-	shadowCameraTop: {
-		set: function ( value ) {
-
-			console.warn( 'THREE.Light: .shadowCameraTop is now .shadow.camera.top.' );
-			this.shadow.camera.top = value;
-
-		}
-	},
-	shadowCameraBottom: {
-		set: function ( value ) {
-
-			console.warn( 'THREE.Light: .shadowCameraBottom is now .shadow.camera.bottom.' );
-			this.shadow.camera.bottom = value;
-
-		}
-	},
-	shadowCameraNear: {
-		set: function ( value ) {
-
-			console.warn( 'THREE.Light: .shadowCameraNear is now .shadow.camera.near.' );
-			this.shadow.camera.near = value;
-
-		}
-	},
-	shadowCameraFar: {
-		set: function ( value ) {
-
-			console.warn( 'THREE.Light: .shadowCameraFar is now .shadow.camera.far.' );
-			this.shadow.camera.far = value;
-
-		}
-	},
-	shadowCameraVisible: {
-		set: function () {
-
-			console.warn( 'THREE.Light: .shadowCameraVisible has been removed. Use new THREE.CameraHelper( light.shadow.camera ) instead.' );
-
-		}
-	},
-	shadowBias: {
-		set: function ( value ) {
-
-			console.warn( 'THREE.Light: .shadowBias is now .shadow.bias.' );
-			this.shadow.bias = value;
-
-		}
-	},
-	shadowDarkness: {
-		set: function () {
-
-			console.warn( 'THREE.Light: .shadowDarkness has been removed.' );
-
-		}
-	},
-	shadowMapWidth: {
-		set: function ( value ) {
-
-			console.warn( 'THREE.Light: .shadowMapWidth is now .shadow.mapSize.width.' );
-			this.shadow.mapSize.width = value;
-
-		}
-	},
-	shadowMapHeight: {
-		set: function ( value ) {
-
-			console.warn( 'THREE.Light: .shadowMapHeight is now .shadow.mapSize.height.' );
-			this.shadow.mapSize.height = value;
-
-		}
-	}
-} );
-
-//
-
-Object.defineProperties( BufferAttribute.prototype, {
-
-	length: {
-		get: function () {
-
-			console.warn( 'THREE.BufferAttribute: .length has been deprecated. Use .count instead.' );
-			return this.array.length;
-
-		}
-	},
-	copyIndicesArray: function ( /* indices */ ) {
-
-		console.error( 'THREE.BufferAttribute: .copyIndicesArray() has been removed.' );
-
-	}
-
-} );
-
-Object.assign( BufferGeometry.prototype, {
-
-	addIndex: function ( index ) {
-
-		console.warn( 'THREE.BufferGeometry: .addIndex() has been renamed to .setIndex().' );
-		this.setIndex( index );
-
-	},
-	addDrawCall: function ( start, count, indexOffset ) {
-
-		if ( indexOffset !== undefined ) {
-
-			console.warn( 'THREE.BufferGeometry: .addDrawCall() no longer supports indexOffset.' );
-
-		}
-		console.warn( 'THREE.BufferGeometry: .addDrawCall() is now .addGroup().' );
-		this.addGroup( start, count );
-
-	},
-	clearDrawCalls: function () {
-
-		console.warn( 'THREE.BufferGeometry: .clearDrawCalls() is now .clearGroups().' );
-		this.clearGroups();
-
-	},
-	computeTangents: function () {
-
-		console.warn( 'THREE.BufferGeometry: .computeTangents() has been removed.' );
-
-	},
-	computeOffsets: function () {
-
-		console.warn( 'THREE.BufferGeometry: .computeOffsets() has been removed.' );
-
-	}
-
-} );
-
-Object.defineProperties( BufferGeometry.prototype, {
-
-	drawcalls: {
-		get: function () {
-
-			console.error( 'THREE.BufferGeometry: .drawcalls has been renamed to .groups.' );
-			return this.groups;
-
-		}
-	},
-	offsets: {
-		get: function () {
-
-			console.warn( 'THREE.BufferGeometry: .offsets has been renamed to .groups.' );
-			return this.groups;
-
-		}
-	}
-
-} );
-
-//
-
-Object.assign( ExtrudeBufferGeometry.prototype, {
-
-	getArrays: function () {
-
-		console.error( 'THREE.ExtrudeBufferGeometry: .getArrays() has been removed.' );
-
-	},
-
-	addShapeList: function () {
-
-		console.error( 'THREE.ExtrudeBufferGeometry: .addShapeList() has been removed.' );
-
-	},
-
-	addShape: function () {
-
-		console.error( 'THREE.ExtrudeBufferGeometry: .addShape() has been removed.' );
-
-	}
-
-} );
-
-//
-
-Object.defineProperties( Uniform.prototype, {
-
-	dynamic: {
-		set: function () {
-
-			console.warn( 'THREE.Uniform: .dynamic has been removed. Use object.onBeforeRender() instead.' );
-
-		}
-	},
-	onUpdate: {
-		value: function () {
-
-			console.warn( 'THREE.Uniform: .onUpdate() has been removed. Use object.onBeforeRender() instead.' );
-			return this;
-
-		}
-	}
-
-} );
-
-//
-
-Object.defineProperties( Material.prototype, {
-
-	wrapAround: {
-		get: function () {
-
-			console.warn( 'THREE.Material: .wrapAround has been removed.' );
-
-		},
-		set: function () {
-
-			console.warn( 'THREE.Material: .wrapAround has been removed.' );
-
-		}
-	},
-
-	overdraw: {
-		get: function () {
-
-			console.warn( 'THREE.Material: .overdraw has been removed.' );
-
-		},
-		set: function () {
-
-			console.warn( 'THREE.Material: .overdraw has been removed.' );
-
-		}
-	},
-
-	wrapRGB: {
-		get: function () {
-
-			console.warn( 'THREE.Material: .wrapRGB has been removed.' );
-			return new Color();
-
-		}
-	},
-
-	shading: {
-		get: function () {
-
-			console.error( 'THREE.' + this.type + ': .shading has been removed. Use the boolean .flatShading instead.' );
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.' + this.type + ': .shading has been removed. Use the boolean .flatShading instead.' );
-			this.flatShading = ( value === FlatShading );
-
-		}
-	}
-
-} );
-
-Object.defineProperties( MeshPhongMaterial.prototype, {
-
-	metal: {
-		get: function () {
-
-			console.warn( 'THREE.MeshPhongMaterial: .metal has been removed. Use THREE.MeshStandardMaterial instead.' );
-			return false;
-
-		},
-		set: function () {
-
-			console.warn( 'THREE.MeshPhongMaterial: .metal has been removed. Use THREE.MeshStandardMaterial instead' );
-
-		}
-	}
-
-} );
-
-Object.defineProperties( ShaderMaterial.prototype, {
-
-	derivatives: {
-		get: function () {
-
-			console.warn( 'THREE.ShaderMaterial: .derivatives has been moved to .extensions.derivatives.' );
-			return this.extensions.derivatives;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE. ShaderMaterial: .derivatives has been moved to .extensions.derivatives.' );
-			this.extensions.derivatives = value;
-
-		}
-	}
-
-} );
-
-//
-
-Object.assign( WebGLRenderer.prototype, {
-
-	clearTarget: function ( renderTarget, color, depth, stencil ) {
-
-		console.warn( 'THREE.WebGLRenderer: .clearTarget() has been deprecated. Use .setRenderTarget() and .clear() instead.' );
-		this.setRenderTarget( renderTarget );
-		this.clear( color, depth, stencil );
-
-	},
-	animate: function ( callback ) {
-
-		console.warn( 'THREE.WebGLRenderer: .animate() is now .setAnimationLoop().' );
-		this.setAnimationLoop( callback );
-
-	},
-	getCurrentRenderTarget: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .getCurrentRenderTarget() is now .getRenderTarget().' );
-		return this.getRenderTarget();
-
-	},
-	getMaxAnisotropy: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .getMaxAnisotropy() is now .capabilities.getMaxAnisotropy().' );
-		return this.capabilities.getMaxAnisotropy();
-
-	},
-	getPrecision: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .getPrecision() is now .capabilities.precision.' );
-		return this.capabilities.precision;
-
-	},
-	resetGLState: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .resetGLState() is now .state.reset().' );
-		return this.state.reset();
-
-	},
-	supportsFloatTextures: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .supportsFloatTextures() is now .extensions.get( \'OES_texture_float\' ).' );
-		return this.extensions.get( 'OES_texture_float' );
-
-	},
-	supportsHalfFloatTextures: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .supportsHalfFloatTextures() is now .extensions.get( \'OES_texture_half_float\' ).' );
-		return this.extensions.get( 'OES_texture_half_float' );
-
-	},
-	supportsStandardDerivatives: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .supportsStandardDerivatives() is now .extensions.get( \'OES_standard_derivatives\' ).' );
-		return this.extensions.get( 'OES_standard_derivatives' );
-
-	},
-	supportsCompressedTextureS3TC: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .supportsCompressedTextureS3TC() is now .extensions.get( \'WEBGL_compressed_texture_s3tc\' ).' );
-		return this.extensions.get( 'WEBGL_compressed_texture_s3tc' );
-
-	},
-	supportsCompressedTexturePVRTC: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .supportsCompressedTexturePVRTC() is now .extensions.get( \'WEBGL_compressed_texture_pvrtc\' ).' );
-		return this.extensions.get( 'WEBGL_compressed_texture_pvrtc' );
-
-	},
-	supportsBlendMinMax: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .supportsBlendMinMax() is now .extensions.get( \'EXT_blend_minmax\' ).' );
-		return this.extensions.get( 'EXT_blend_minmax' );
-
-	},
-	supportsVertexTextures: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .supportsVertexTextures() is now .capabilities.vertexTextures.' );
-		return this.capabilities.vertexTextures;
-
-	},
-	supportsInstancedArrays: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .supportsInstancedArrays() is now .extensions.get( \'ANGLE_instanced_arrays\' ).' );
-		return this.extensions.get( 'ANGLE_instanced_arrays' );
-
-	},
-	enableScissorTest: function ( boolean ) {
-
-		console.warn( 'THREE.WebGLRenderer: .enableScissorTest() is now .setScissorTest().' );
-		this.setScissorTest( boolean );
-
-	},
-	initMaterial: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .initMaterial() has been removed.' );
-
-	},
-	addPrePlugin: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .addPrePlugin() has been removed.' );
-
-	},
-	addPostPlugin: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .addPostPlugin() has been removed.' );
-
-	},
-	updateShadowMap: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .updateShadowMap() has been removed.' );
-
-	},
-	setFaceCulling: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .setFaceCulling() has been removed.' );
-
-	},
-	allocTextureUnit: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .allocTextureUnit() has been removed.' );
-
-	},
-	setTexture: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .setTexture() has been removed.' );
-
-	},
-	setTexture2D: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .setTexture2D() has been removed.' );
-
-	},
-	setTextureCube: function () {
-
-		console.warn( 'THREE.WebGLRenderer: .setTextureCube() has been removed.' );
-
-	}
-
-} );
-
-Object.defineProperties( WebGLRenderer.prototype, {
-
-	shadowMapEnabled: {
-		get: function () {
-
-			return this.shadowMap.enabled;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.WebGLRenderer: .shadowMapEnabled is now .shadowMap.enabled.' );
-			this.shadowMap.enabled = value;
-
-		}
-	},
-	shadowMapType: {
-		get: function () {
-
-			return this.shadowMap.type;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.WebGLRenderer: .shadowMapType is now .shadowMap.type.' );
-			this.shadowMap.type = value;
-
-		}
-	},
-	shadowMapCullFace: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderer: .shadowMapCullFace has been removed. Set Material.shadowSide instead.' );
-			return undefined;
-
-		},
-		set: function ( /* value */ ) {
-
-			console.warn( 'THREE.WebGLRenderer: .shadowMapCullFace has been removed. Set Material.shadowSide instead.' );
-
-		}
-	}
-} );
-
-Object.defineProperties( WebGLShadowMap.prototype, {
-
-	cullFace: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderer: .shadowMap.cullFace has been removed. Set Material.shadowSide instead.' );
-			return undefined;
-
-		},
-		set: function ( /* cullFace */ ) {
-
-			console.warn( 'THREE.WebGLRenderer: .shadowMap.cullFace has been removed. Set Material.shadowSide instead.' );
-
-		}
-	},
-	renderReverseSided: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderer: .shadowMap.renderReverseSided has been removed. Set Material.shadowSide instead.' );
-			return undefined;
-
-		},
-		set: function () {
-
-			console.warn( 'THREE.WebGLRenderer: .shadowMap.renderReverseSided has been removed. Set Material.shadowSide instead.' );
-
-		}
-	},
-	renderSingleSided: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderer: .shadowMap.renderSingleSided has been removed. Set Material.shadowSide instead.' );
-			return undefined;
-
-		},
-		set: function () {
-
-			console.warn( 'THREE.WebGLRenderer: .shadowMap.renderSingleSided has been removed. Set Material.shadowSide instead.' );
-
-		}
-	}
-
-} );
-
-//
-
-Object.defineProperties( WebGLRenderTargetCube.prototype, {
-
-	activeCubeFace: {
-		set: function ( /* value */ ) {
-
-			console.warn( 'THREE.WebGLRenderTargetCube: .activeCubeFace has been removed. It is now the second parameter of WebGLRenderer.setRenderTarget().' );
-
-		}
-	},
-	activeMipMapLevel: {
-		set: function ( /* value */ ) {
-
-			console.warn( 'THREE.WebGLRenderTargetCube: .activeMipMapLevel has been removed. It is now the third parameter of WebGLRenderer.setRenderTarget().' );
-
-		}
-	}
-
-} );
-
-//
-
-Object.defineProperties( WebGLRenderTarget.prototype, {
-
-	wrapS: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderTarget: .wrapS is now .texture.wrapS.' );
-			return this.texture.wrapS;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.WebGLRenderTarget: .wrapS is now .texture.wrapS.' );
-			this.texture.wrapS = value;
-
-		}
-	},
-	wrapT: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderTarget: .wrapT is now .texture.wrapT.' );
-			return this.texture.wrapT;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.WebGLRenderTarget: .wrapT is now .texture.wrapT.' );
-			this.texture.wrapT = value;
-
-		}
-	},
-	magFilter: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderTarget: .magFilter is now .texture.magFilter.' );
-			return this.texture.magFilter;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.WebGLRenderTarget: .magFilter is now .texture.magFilter.' );
-			this.texture.magFilter = value;
-
-		}
-	},
-	minFilter: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderTarget: .minFilter is now .texture.minFilter.' );
-			return this.texture.minFilter;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.WebGLRenderTarget: .minFilter is now .texture.minFilter.' );
-			this.texture.minFilter = value;
-
-		}
-	},
-	anisotropy: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderTarget: .anisotropy is now .texture.anisotropy.' );
-			return this.texture.anisotropy;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.WebGLRenderTarget: .anisotropy is now .texture.anisotropy.' );
-			this.texture.anisotropy = value;
-
-		}
-	},
-	offset: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderTarget: .offset is now .texture.offset.' );
-			return this.texture.offset;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.WebGLRenderTarget: .offset is now .texture.offset.' );
-			this.texture.offset = value;
-
-		}
-	},
-	repeat: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderTarget: .repeat is now .texture.repeat.' );
-			return this.texture.repeat;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.WebGLRenderTarget: .repeat is now .texture.repeat.' );
-			this.texture.repeat = value;
-
-		}
-	},
-	format: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderTarget: .format is now .texture.format.' );
-			return this.texture.format;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.WebGLRenderTarget: .format is now .texture.format.' );
-			this.texture.format = value;
-
-		}
-	},
-	type: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderTarget: .type is now .texture.type.' );
-			return this.texture.type;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.WebGLRenderTarget: .type is now .texture.type.' );
-			this.texture.type = value;
-
-		}
-	},
-	generateMipmaps: {
-		get: function () {
-
-			console.warn( 'THREE.WebGLRenderTarget: .generateMipmaps is now .texture.generateMipmaps.' );
-			return this.texture.generateMipmaps;
-
-		},
-		set: function ( value ) {
-
-			console.warn( 'THREE.WebGLRenderTarget: .generateMipmaps is now .texture.generateMipmaps.' );
-			this.texture.generateMipmaps = value;
-
-		}
-	}
-
-} );
-
-//
-
-Object.defineProperties( WebVRManager.prototype, {
-
-	standing: {
-		set: function ( /* value */ ) {
-
-			console.warn( 'THREE.WebVRManager: .standing has been removed.' );
-
-		}
-	},
-	userHeight: {
-		set: function ( /* value */ ) {
-
-			console.warn( 'THREE.WebVRManager: .userHeight has been removed.' );
-
-		}
-	}
-
-} );
-
-//
-
-Audio.prototype.load = function ( file ) {
-
-	console.warn( 'THREE.Audio: .load has been deprecated. Use THREE.AudioLoader instead.' );
-	var scope = this;
-	var audioLoader = new AudioLoader();
-	audioLoader.load( file, function ( buffer ) {
-
-		scope.setBuffer( buffer );
-
-	} );
-	return this;
-
-};
-
-AudioAnalyser.prototype.getData = function () {
-
-	console.warn( 'THREE.AudioAnalyser: .getData() is now .getFrequencyData().' );
-	return this.getFrequencyData();
-
-};
-
-//
-
-CubeCamera.prototype.updateCubeMap = function ( renderer, scene ) {
-
-	console.warn( 'THREE.CubeCamera: .updateCubeMap() is now .update().' );
-	return this.update( renderer, scene );
-
-};
-
-//
-
-var GeometryUtils = {
-
-	merge: function ( geometry1, geometry2, materialIndexOffset ) {
-
-		console.warn( 'THREE.GeometryUtils: .merge() has been moved to Geometry. Use geometry.merge( geometry2, matrix, materialIndexOffset ) instead.' );
-		var matrix;
-
-		if ( geometry2.isMesh ) {
-
-			geometry2.matrixAutoUpdate && geometry2.updateMatrix();
-
-			matrix = geometry2.matrix;
-			geometry2 = geometry2.geometry;
-
-		}
-
-		geometry1.merge( geometry2, matrix, materialIndexOffset );
-
-	},
-
-	center: function ( geometry ) {
-
-		console.warn( 'THREE.GeometryUtils: .center() has been moved to Geometry. Use geometry.center() instead.' );
-		return geometry.center();
-
-	}
-
-};
-
-ImageUtils.crossOrigin = undefined;
-
-ImageUtils.loadTexture = function ( url, mapping, onLoad, onError ) {
-
-	console.warn( 'THREE.ImageUtils.loadTexture has been deprecated. Use THREE.TextureLoader() instead.' );
-
-	var loader = new TextureLoader();
-	loader.setCrossOrigin( this.crossOrigin );
-
-	var texture = loader.load( url, onLoad, undefined, onError );
-
-	if ( mapping ) texture.mapping = mapping;
-
-	return texture;
-
-};
-
-ImageUtils.loadTextureCube = function ( urls, mapping, onLoad, onError ) {
-
-	console.warn( 'THREE.ImageUtils.loadTextureCube has been deprecated. Use THREE.CubeTextureLoader() instead.' );
-
-	var loader = new CubeTextureLoader();
-	loader.setCrossOrigin( this.crossOrigin );
-
-	var texture = loader.load( urls, onLoad, undefined, onError );
-
-	if ( mapping ) texture.mapping = mapping;
-
-	return texture;
-
-};
-
-ImageUtils.loadCompressedTexture = function () {
-
-	console.error( 'THREE.ImageUtils.loadCompressedTexture has been removed. Use THREE.DDSLoader instead.' );
-
-};
-
-ImageUtils.loadCompressedTextureCube = function () {
-
-	console.error( 'THREE.ImageUtils.loadCompressedTextureCube has been removed. Use THREE.DDSLoader instead.' );
-
-};
-
-//
-
-function CanvasRenderer() {
-
-	console.error( 'THREE.CanvasRenderer has been removed' );
-
-}
-
-//
-
-function JSONLoader() {
-
-	console.error( 'THREE.JSONLoader has been removed.' );
-
-}
-
-//
-
-var SceneUtils = {
-
-	createMultiMaterialObject: function ( /* geometry, materials */ ) {
-
-		console.error( 'THREE.SceneUtils has been moved to /examples/js/utils/SceneUtils.js' );
-
-	},
-
-	detach: function ( /* child, parent, scene */ ) {
-
-		console.error( 'THREE.SceneUtils has been moved to /examples/js/utils/SceneUtils.js' );
-
-	},
-
-	attach: function ( /* child, scene, parent */ ) {
-
-		console.error( 'THREE.SceneUtils has been moved to /examples/js/utils/SceneUtils.js' );
-
-	}
-
-};
-
-//
-
-function LensFlare() {
-
-	console.error( 'THREE.LensFlare has been moved to /examples/js/objects/Lensflare.js' );
-
-}
 
 /**
  * @author renej
@@ -49373,9 +49398,10 @@ Object.assign(FBXLoader.prototype, {
 		// console.log( FBXTree );
 
 		var connections = parseConnections(FBXTree);
-		var images = parseImages(FBXTree);
-		var textures = parseTextures(FBXTree, new TextureLoader(this.manager).setPath(resourceDirectory), images, connections);
-		var materials = parseMaterials(FBXTree, textures, connections);
+		// var images = parseImages(FBXTree);
+		// var textures = parseTextures(FBXTree, new TextureLoader(this.manager).setPath(resourceDirectory), images, connections);
+		// var materials = parseMaterials(FBXTree, textures, connections);
+		var materials = new Map();
 		var skeletons = parseDeformers(FBXTree, connections);
 		var geometryMap = parseGeometries(FBXTree, connections, skeletons);
 		var sceneGraph = parseScene(FBXTree, connections, skeletons, geometryMap, materials);
@@ -49431,409 +49457,6 @@ function parseConnections(FBXTree) {
 	}
 
 	return connectionMap;
-
-}
-
-// Parse FBXTree.Objects.Video for embedded image data
-// These images are connected to textures in FBXTree.Objects.Textures
-// via FBXTree.Connections.
-function parseImages(FBXTree) {
-
-	var images = {};
-	var blobs = {};
-
-	if ('Video' in FBXTree.Objects) {
-
-		var videoNodes = FBXTree.Objects.Video;
-
-		for (var nodeID in videoNodes) {
-
-			var videoNode = videoNodes[nodeID];
-
-			var id = parseInt(nodeID);
-
-			images[id] = videoNode.Filename;
-
-			// raw image data is in videoNode.Content
-			if ('Content' in videoNode) {
-
-				var arrayBufferContent = (videoNode.Content instanceof ArrayBuffer) && (videoNode.Content.byteLength > 0);
-				var base64Content = (typeof videoNode.Content === 'string') && (videoNode.Content !== '');
-
-				if (arrayBufferContent || base64Content) {
-
-					var image = parseImage(videoNodes[nodeID]);
-
-					blobs[videoNode.Filename] = image;
-
-				}
-
-			}
-
-		}
-
-	}
-
-	for (var id in images) {
-
-		var filename = images[id];
-
-		if (blobs[filename] !== undefined) images[id] = blobs[filename];
-		else images[id] = images[id].split('\\').pop();
-
-	}
-
-	return images;
-
-}
-
-// Parse embedded image data in FBXTree.Video.Content
-function parseImage(videoNode) {
-
-	var content = videoNode.Content;
-	var fileName = videoNode.RelativeFilename || videoNode.Filename;
-	var extension = fileName.slice(fileName.lastIndexOf('.') + 1).toLowerCase();
-
-	var type;
-
-	switch (extension) {
-
-		case 'bmp':
-
-			type = 'image/bmp';
-			break;
-
-		case 'jpg':
-		case 'jpeg':
-
-			type = 'image/jpeg';
-			break;
-
-		case 'png':
-
-			type = 'image/png';
-			break;
-
-		case 'tif':
-
-			type = 'image/tiff';
-			break;
-
-		default:
-
-			console.warn('FBXLoader: Image type "' + extension + '" is not supported.');
-			return;
-
-	}
-
-	if (typeof content === 'string') { // ASCII format
-
-		return 'data:' + type + ';base64,' + content;
-
-	} else { // Binary Format
-
-		var array = new Uint8Array(content);
-		return window.URL.createObjectURL(new Blob([array], {type: type}));
-
-	}
-
-}
-
-// Parse nodes in FBXTree.Objects.Texture
-// These contain details such as UV scaling, cropping, rotation etc and are connected
-// to images in FBXTree.Objects.Video
-function parseTextures(FBXTree, loader, images, connections) {
-
-	var textureMap = new Map();
-
-	if ('Texture' in FBXTree.Objects) {
-
-		var textureNodes = FBXTree.Objects.Texture;
-		for (var nodeID in textureNodes) {
-
-			var texture = parseTexture(textureNodes[nodeID], loader, images, connections);
-			textureMap.set(parseInt(nodeID), texture);
-
-		}
-
-	}
-
-	return textureMap;
-
-}
-
-// Parse individual node in FBXTree.Objects.Texture
-function parseTexture(textureNode, loader, images, connections) {
-
-	var texture = loadTexture(textureNode, loader, images, connections);
-
-	texture.ID = textureNode.id;
-
-	texture.name = textureNode.attrName;
-
-	var wrapModeU = textureNode.WrapModeU;
-	var wrapModeV = textureNode.WrapModeV;
-
-	var valueU = wrapModeU !== undefined ? wrapModeU.value : 0;
-	var valueV = wrapModeV !== undefined ? wrapModeV.value : 0;
-
-	// http://download.autodesk.com/us/fbx/SDKdocs/FBX_SDK_Help/files/fbxsdkref/class_k_fbx_texture.html#889640e63e2e681259ea81061b85143a
-	// 0: repeat(default), 1: clamp
-
-	texture.wrapS = valueU === 0 ? RepeatWrapping : ClampToEdgeWrapping;
-	texture.wrapT = valueV === 0 ? RepeatWrapping : ClampToEdgeWrapping;
-
-	if ('Scaling' in textureNode) {
-
-		var values = textureNode.Scaling.value;
-
-		texture.repeat.x = values[0];
-		texture.repeat.y = values[1];
-
-	}
-
-	return texture;
-
-}
-
-// load a texture specified as a blob or data URI, or via an external URL using THREE.TextureLoader
-function loadTexture(textureNode, loader, images, connections) {
-
-	var fileName;
-
-	var currentPath = loader.path;
-
-	var children = connections.get(textureNode.id).children;
-
-	if (children !== undefined && children.length > 0 && images[children[0].ID] !== undefined) {
-
-		fileName = images[children[0].ID];
-
-		if (fileName.indexOf('blob:') === 0 || fileName.indexOf('data:') === 0) {
-
-			loader.setPath(undefined);
-
-		}
-
-	}
-
-	var texture = loader.load(fileName);
-
-	loader.setPath(currentPath);
-
-	return texture;
-
-}
-
-// Parse nodes in FBXTree.Objects.Material
-function parseMaterials(FBXTree, textureMap, connections) {
-
-	var materialMap = new Map();
-
-	if ('Material' in FBXTree.Objects) {
-
-		var materialNodes = FBXTree.Objects.Material;
-
-		for (var nodeID in materialNodes) {
-
-			var material = parseMaterial(FBXTree, materialNodes[nodeID], textureMap, connections);
-
-			if (material !== null) materialMap.set(parseInt(nodeID), material);
-
-		}
-
-	}
-
-	return materialMap;
-
-}
-
-// Parse single node in FBXTree.Objects.Material
-// Materials are connected to texture maps in FBXTree.Objects.Textures
-// FBX format currently only supports Lambert and Phong shading models
-function parseMaterial(FBXTree, materialNode, textureMap, connections) {
-
-	var ID = materialNode.id;
-	var name = materialNode.attrName;
-	var type = materialNode.ShadingModel;
-
-	//Case where FBX wraps shading model in property object.
-	if (typeof type === 'object') {
-
-		type = type.value;
-
-	}
-
-	// Ignore unused materials which don't have any connections.
-	if (!connections.has(ID)) return null;
-
-	var parameters = parseParameters(FBXTree, materialNode, textureMap, ID, connections);
-
-	var material;
-
-	switch (type.toLowerCase()) {
-
-		case 'phong':
-			material = new MeshPhongMaterial();
-			break;
-		case 'lambert':
-			material = new MeshLambertMaterial();
-			break;
-		default:
-			console.warn('THREE.FBXLoader: unknown material type "%s". Defaulting to MeshPhongMaterial.', type);
-			material = new MeshPhongMaterial({color: 0x3300ff});
-			break;
-
-	}
-
-	material.setValues(parameters);
-	material.name = name;
-
-	return material;
-
-}
-
-// Parse FBX material and return parameters suitable for a three.js material
-// Also parse the texture map and return any textures associated with the material
-function parseParameters(FBXTree, properties, textureMap, ID, connections) {
-
-	var parameters = {};
-
-	if (properties.BumpFactor) {
-
-		parameters.bumpScale = properties.BumpFactor.value;
-
-	}
-	if (properties.Diffuse) {
-
-		parameters.color = new Color().fromArray(properties.Diffuse.value);
-
-	} else if (properties.DiffuseColor && properties.DiffuseColor.type === 'Color') {
-
-		// The blender exporter exports diffuse here instead of in properties.Diffuse
-		parameters.color = new Color().fromArray(properties.DiffuseColor.value);
-
-	}
-	if (properties.DisplacementFactor) {
-
-		parameters.displacementScale = properties.DisplacementFactor.value;
-
-	}
-	if (properties.ReflectionFactor) {
-
-		parameters.reflectivity = properties.ReflectionFactor.value;
-
-	}
-	if (properties.Specular) {
-
-		parameters.specular = new Color().fromArray(properties.Specular.value);
-
-	} else if (properties.SpecularColor && properties.SpecularColor.type === 'Color') {
-
-		// The blender exporter exports specular color here instead of in properties.Specular
-		parameters.emissive = new Color().fromArray(properties.SpecularColor.value);
-
-	}
-	if (properties.Shininess) {
-
-		parameters.shininess = properties.Shininess.value;
-
-	}
-	if (properties.Emissive) {
-
-		parameters.emissive = new Color().fromArray(properties.Emissive.value);
-
-	} else if (properties.EmissiveColor && properties.EmissiveColor.type === 'Color') {
-
-		// The blender exporter exports emissive color here instead of in properties.Emissive
-		parameters.emissive = new Color().fromArray(properties.EmissiveColor.value);
-
-	}
-	if (properties.EmissiveFactor) {
-
-		parameters.emissiveIntensity = parseFloat(properties.EmissiveFactor.value);
-
-	}
-	if (properties.Opacity) {
-
-		parameters.opacity = parseFloat(properties.Opacity.value);
-
-	}
-	if (parameters.opacity < 1.0) {
-
-		parameters.transparent = true;
-
-	}
-
-	connections.get(ID).children.forEach(function (child) {
-
-		var type = child.relationship;
-
-		switch (type) {
-
-			case 'Bump':
-				parameters.bumpMap = textureMap.get(child.ID);
-				break;
-
-			case 'DiffuseColor':
-				parameters.map = getTexture(FBXTree, textureMap, child.ID, connections);
-				break;
-
-			case 'DisplacementColor':
-				parameters.displacementMap = getTexture(FBXTree, textureMap, child.ID, connections);
-				break;
-
-
-			case 'EmissiveColor':
-				parameters.emissiveMap = getTexture(FBXTree, textureMap, child.ID, connections);
-				break;
-
-			case 'NormalMap':
-				parameters.normalMap = getTexture(FBXTree, textureMap, child.ID, connections);
-				break;
-
-			case 'ReflectionColor':
-				parameters.envMap = getTexture(FBXTree, textureMap, child.ID, connections);
-				parameters.envMap.mapping = EquirectangularReflectionMapping;
-				break;
-
-			case 'SpecularColor':
-				parameters.specularMap = getTexture(FBXTree, textureMap, child.ID, connections);
-				break;
-
-			case 'TransparentColor':
-				parameters.alphaMap = getTexture(FBXTree, textureMap, child.ID, connections);
-				parameters.transparent = true;
-				break;
-
-			case 'AmbientColor':
-			case 'ShininessExponent': // AKA glossiness map
-			case 'SpecularFactor': // AKA specularLevel
-			case 'VectorDisplacementColor': // NOTE: Seems to be a copy of DisplacementColor
-			default:
-				console.warn('THREE.FBXLoader: %s map is not supported in three.js, skipping texture.', type);
-				break;
-
-		}
-
-	});
-
-	return parameters;
-
-}
-
-// get a texture from the textureMap for use by a material.
-function getTexture(FBXTree, textureMap, id, connections) {
-
-	// if the texture is a layered texture, just use the first layer and issue a warning
-	if ('LayeredTexture' in FBXTree.Objects && id in FBXTree.Objects.LayeredTexture) {
-
-		console.warn('THREE.FBXLoader: layered textures are not supported in three.js. Discarding all but first layer.');
-		id = connections.get(id).children[0].ID;
-
-	}
-
-	return textureMap.get(id);
 
 }
 
@@ -49933,6 +49556,7 @@ function parseGeometries(FBXTree, connections, skeletons) {
 			var relationships = connections.get(parseInt(nodeID));
 			var geo = parseGeometry(FBXTree, relationships, geometryNodes[nodeID], skeletons);
 
+			// geometryMap.set(parseInt(nodeID), new BufferGeometry());
 			geometryMap.set(parseInt(nodeID), geo);
 
 		}
@@ -50025,6 +49649,7 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 	// create arrays to hold the final data used to build the buffergeometry
 	var vertexBuffer = [];
 	var normalBuffer = [];
+	var tangentBuffer = [];
 	var colorsBuffer = [];
 	var uvsBuffer = [];
 	var materialIndexBuffer = [];
@@ -50046,6 +49671,12 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 	if (geometryNode.LayerElementNormal) {
 
 		var normalInfo = getNormals(geometryNode.LayerElementNormal[0]);
+
+	}
+
+	if ( geometryNode.LayerElementTangent ) {
+
+		var tangentInfo = parseTangents( geometryNode.LayerElementTangent[ 0 ] );
 
 	}
 
@@ -50094,6 +49725,7 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 	var vertexPositionIndexes = [];
 	var faceNormals = [];
 	var faceColors = [];
+	var faceTangents = [];
 	var faceUVs = [];
 	var faceWeights = [];
 	var faceWeightIndices = [];
@@ -50205,6 +49837,14 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 			var data = getData(polygonVertexIndex, polygonIndex, vertexIndex, normalInfo);
 
 			faceNormals.push(data[0], data[1], data[2]);
+
+		}
+
+		if ( tangentInfo ) {
+
+			var data = getData( polygonVertexIndex, polygonIndex, vertexIndex, tangentInfo );
+
+			faceTangents.push( data[ 0 ], data[ 1 ], data[ 2 ], data[ 3 ] );
 
 		}
 
@@ -50327,6 +49967,25 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 
 				}
 
+				if (tangentInfo) {
+
+					tangentBuffer.push(faceTangents[0]);
+					tangentBuffer.push(faceTangents[1]);
+					tangentBuffer.push(faceTangents[2]);
+					tangentBuffer.push(faceTangents[3]);
+
+					tangentBuffer.push(faceTangents[(i - 1) * 4]);
+					tangentBuffer.push(faceTangents[(i - 1) * 4 + 1]);
+					tangentBuffer.push(faceTangents[(i - 1) * 4 + 2]);
+					tangentBuffer.push(faceTangents[(i - 1) * 4 + 3]);
+
+					tangentBuffer.push(faceTangents[i * 4]);
+					tangentBuffer.push(faceTangents[i * 4 + 1]);
+					tangentBuffer.push(faceTangents[i * 4 + 2]);
+					tangentBuffer.push(faceTangents[i * 4 + 3]);
+
+				}
+
 				if (uvInfo) {
 
 					uvInfo.forEach(function (uv, j) {
@@ -50354,6 +50013,7 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 			// reset arrays for the next face
 			vertexPositionIndexes = [];
 			faceNormals = [];
+			faceTangents = [];
 			faceColors = [];
 			faceUVs = [];
 			faceWeights = [];
@@ -50397,6 +50057,17 @@ function genGeometry(FBXTree, relationships, geometryNode, skeleton, preTransfor
 		normalMatrix.applyToBufferAttribute(normalAttribute);
 
 		geo.addAttribute('normal', normalAttribute);
+
+	}
+
+	if (tangentBuffer.length > 0) {
+
+		var tangentAttribute = new Float32BufferAttribute(tangentBuffer, 3);
+
+		// var normalMatrix = new Matrix3().getNormalMatrix(preTransform);
+		// normalMatrix.applyToBufferAttribute(normalAttribute);
+
+		geo.addAttribute('tangent', tangentAttribute);
 
 	}
 
@@ -50487,6 +50158,37 @@ function getNormals(NormalNode) {
 
 	return {
 		dataSize: 3,
+		buffer: buffer,
+		indices: indexBuffer,
+		mappingType: mappingType,
+		referenceType: referenceType
+	};
+
+}
+
+// Parse normal from FBXTree.Objects.Geometry.LayerElementNormal if it exists
+function parseTangents ( TangentNode ) {
+
+	var mappingType = TangentNode.MappingInformationType;
+	var referenceType = TangentNode.ReferenceInformationType;
+	var buffer = TangentNode.Tangents.a;
+	var indexBuffer = [];
+	if ( referenceType === 'IndexToDirect' ) {
+
+		if ( 'NormalIndex' in TangentNode ) {
+
+			indexBuffer = TangentNode.NormalIndex.a;
+
+		} else if ( 'NormalsIndex' in TangentNode ) {
+
+			indexBuffer = TangentNode.NormalsIndex.a;
+
+		}
+
+	}
+
+	return {
+		dataSize: 4,
 		buffer: buffer,
 		indices: indexBuffer,
 		mappingType: mappingType,
@@ -50822,6 +50524,7 @@ function parseModels(FBXTree, skeletons, geometryMap, materialMap, connections) 
 					break;
 
 			}
+			// console.log('node', node.attrName);
 
 			model.name = PropertyBinding.sanitizeNodeName(node.attrName);
 			model.ID = id;
@@ -51126,11 +50829,6 @@ function createMesh(FBXTree, relationships, geometryMap, materialMap) {
 	} else if (materials.length > 0) {
 
 		material = materials[0];
-
-	} else {
-
-		material = new MeshPhongMaterial({color: 0xcccccc});
-		materials.push(material);
 
 	}
 
@@ -55616,6 +55314,8 @@ ColladaLoader.prototype = {
 			var normal = { array: [], stride: 0 };
 			var uv = { array: [], stride: 0 };
 			var uv2 = { array: [], stride: 0 };
+			var uv3 = { array: [], stride: 0 };
+			var tangent = { array: [], stride: 0 };
 			var color = { array: [], stride: 0 };
 
 			var skinIndex = { array: [], stride: 4 };
@@ -55750,7 +55450,17 @@ ColladaLoader.prototype = {
 
 									case 'TEXCOORD1':
 										buildGeometryData( primitive, sources[ id ], input.offset, uv2.array );
-										uv.stride = sources[ id ].stride;
+										uv3.stride = sources[ id ].stride;
+										break;
+
+									case 'TEXCOORD2':
+										buildGeometryData( primitive, sources[ id ], input.offset, uv3.array );
+										uv3.stride = sources[ id ].stride;
+										break;
+
+									case 'TANGENT':
+										buildGeometryData( primitive, sources[ id ], input.offset, tangent.array );
+										tangent.stride = sources[ id ].stride;
 										break;
 
 									default:
@@ -55781,6 +55491,16 @@ ColladaLoader.prototype = {
 							uv2.stride = sources[ input.id ].stride;
 							break;
 
+						case 'TEXCOORD2':
+							buildGeometryData( primitive, sources[ id ], input.offset, uv3.array );
+							uv3.stride = sources[ id ].stride;
+							break;
+
+						case 'TANGENT':
+							buildGeometryData( primitive, sources[ id ], input.offset, tangent.array );
+							tangent.stride = sources[ id ].stride;
+							break;
+
 					}
 
 				}
@@ -55794,6 +55514,9 @@ ColladaLoader.prototype = {
 			if ( color.array.length > 0 ) geometry.addAttribute( 'color', new Float32BufferAttribute( color.array, color.stride ) );
 			if ( uv.array.length > 0 ) geometry.addAttribute( 'uv', new Float32BufferAttribute( uv.array, uv.stride ) );
 			if ( uv2.array.length > 0 ) geometry.addAttribute( 'uv2', new Float32BufferAttribute( uv2.array, uv2.stride ) );
+			if ( uv3.array.length > 0 ) geometry.addAttribute( 'uv3', new Float32BufferAttribute( uv3.array, uv3.stride ) );
+
+			if ( tangent.array.length > 0 ) geometry.addAttribute( 'tangent', new Float32BufferAttribute( tangent.array, tangent.stride ) );
 
 			if ( skinIndex.array.length > 0 ) geometry.addAttribute( 'skinIndex', new Float32BufferAttribute( skinIndex.array, skinIndex.stride ) );
 			if ( skinWeight.array.length > 0 ) geometry.addAttribute( 'skinWeight', new Float32BufferAttribute( skinWeight.array, skinWeight.stride ) );
@@ -64096,6 +63819,7 @@ var TransformControls = function ( camera, domElement ) {
 	Object3D.call( this );
 
 	domElement = ( domElement !== undefined ) ? domElement : document;
+	this.dom = domElement;
 
 	this.visible = false;
 
@@ -64193,7 +63917,7 @@ var TransformControls = function ( camera, domElement ) {
 
 		domElement.addEventListener( "mousedown", onPointerDown, false );
 		domElement.addEventListener( "touchstart", onPointerDown, false );
-		domElement.addEventListener( "mousemove", onPointerHover, false );
+		// domElement.addEventListener( "mousemove", onPointerHover, false );
 		domElement.addEventListener( "touchmove", onPointerHover, false );
 		domElement.addEventListener( "touchmove", onPointerMove, false );
 		document.addEventListener( "mouseup", onPointerUp, false );
@@ -64207,7 +63931,7 @@ var TransformControls = function ( camera, domElement ) {
 
 		domElement.removeEventListener( "mousedown", onPointerDown );
 		domElement.removeEventListener( "touchstart", onPointerDown );
-		domElement.removeEventListener( "mousemove", onPointerHover );
+		// domElement.removeEventListener( "mousemove", onPointerHover );
 		document.removeEventListener( "mousemove", onPointerMove );
 		domElement.removeEventListener( "touchmove", onPointerHover );
 		domElement.removeEventListener( "touchmove", onPointerMove );
@@ -64658,7 +64382,7 @@ var TransformControls = function ( camera, domElement ) {
 
 		if ( ! scope.enabled ) return;
 
-		document.addEventListener( "mousemove", onPointerMove, false );
+		scope.dom.addEventListener( "mousemove", onPointerMove, false );
 
 		scope.pointerHover( getPointer( event ) );
 		scope.pointerDown( getPointer( event ) );
@@ -64677,7 +64401,8 @@ var TransformControls = function ( camera, domElement ) {
 
 		if ( ! scope.enabled ) return;
 
-		document.removeEventListener( "mousemove", onPointerMove, false );
+		// document.removeEventListener( "mousemove", onPointerMove, false );
+		scope.dom.removeEventListener( "mousemove", onPointerMove, false );
 
 		scope.pointerUp( getPointer( event ) );
 
@@ -70002,6 +69727,659 @@ var VREffect = function ( renderer, onError ) {
 };
 
 /**
+ * @author Garrett Johnson / http://gkjohnson.github.io/
+ * https://github.com/gkjohnson/collada-exporter-js
+ *
+ * Usage:
+ *  var exporter = new ColladaExporter();
+ *
+ *  var data = exporter.parse(mesh);
+ *
+ * Format Definition:
+ *  https://www.khronos.org/collada/
+ */
+
+var ColladaExporter = function () {};
+
+ColladaExporter.prototype = {
+
+	constructor: ColladaExporter,
+
+	parse: function ( object, onDone, options = {} ) {
+
+		options = Object.assign( {
+			version: '1.4.1',
+			author: null,
+			textureDirectory: '',
+		}, options );
+
+		if ( options.textureDirectory !== '' ) {
+
+			options.textureDirectory = `${ options.textureDirectory }/`
+				.replace( /\\/g, '/' )
+				.replace( /\/+/g, '/' );
+
+		}
+
+		var version = options.version;
+		if ( version !== '1.4.1' && version !== '1.5.0' ) {
+
+			console.warn( `ColladaExporter : Version ${ version } not supported for export. Only 1.4.1 and 1.5.0.` );
+			return null;
+
+		}
+
+		// Convert the urdf xml into a well-formatted, indented format
+		function format( urdf ) {
+
+			var IS_END_TAG = /^<\//;
+			var IS_SELF_CLOSING = /(\?>$)|(\/>$)/;
+			var HAS_TEXT = /<[^>]+>[^<]*<\/[^<]+>/;
+
+			var pad = ( ch, num ) => ( num > 0 ? ch + pad( ch, num - 1 ) : '' );
+
+			var tagnum = 0;
+			return urdf
+				.match( /(<[^>]+>[^<]+<\/[^<]+>)|(<[^>]+>)/g )
+				.map( tag => {
+
+					if ( ! HAS_TEXT.test( tag ) && ! IS_SELF_CLOSING.test( tag ) && IS_END_TAG.test( tag ) ) {
+
+						tagnum --;
+
+					}
+
+					var res = `${ pad( '  ', tagnum ) }${ tag }`;
+
+					if ( ! HAS_TEXT.test( tag ) && ! IS_SELF_CLOSING.test( tag ) && ! IS_END_TAG.test( tag ) ) {
+
+						tagnum ++;
+
+					}
+
+					return res;
+
+				} )
+				.join( '\n' );
+
+		}
+
+		// Convert an image into a png format for saving
+		function base64ToBuffer( str ) {
+
+			var b = atob( str );
+			var buf = new Uint8Array( b.length );
+
+			for ( var i = 0, l = buf.length; i < l; i ++ ) {
+
+				buf[ i ] = b.charCodeAt( i );
+
+			}
+
+			return buf;
+
+		}
+
+		var canvas, ctx;
+		function imageToData( image, ext ) {
+
+			canvas = canvas || document.createElement( 'canvas' );
+			ctx = ctx || canvas.getContext( '2d' );
+
+			canvas.width = image.naturalWidth;
+			canvas.height = image.naturalHeight;
+
+			ctx.drawImage( image, 0, 0 );
+
+			// Get the base64 encoded data
+			var base64data = canvas
+				.toDataURL( `image/${ ext }`, 1 )
+				.replace( /^data:image\/(png|jpg);base64,/, '' );
+
+			// Convert to a uint8 array
+			return base64ToBuffer( base64data );
+
+		}
+
+		// gets the attribute array. Generate a new array if the attribute is interleaved
+		var getFuncs = [ 'getX', 'getY', 'getZ', 'getW' ];
+		function attrBufferToArray( attr ) {
+
+			if ( attr.isInterleavedBufferAttribute ) {
+
+				// use the typed array constructor to save on memory
+				var arr = new attr.array.constructor( attr.count * attr.itemSize );
+				var size = attr.itemSize;
+				for ( var i = 0, l = attr.count; i < l; i ++ ) {
+
+					for ( var j = 0; j < size; j ++ ) {
+
+						arr[ i * size + j ] = attr[ getFuncs[ j ] ]( i );
+
+					}
+
+				}
+
+				return arr;
+
+			} else {
+
+				return attr.array;
+
+			}
+
+		}
+
+		// Returns an array of the same type starting at the `st` index,
+		// and `ct` length
+		function subArray( arr, st, ct ) {
+
+			if ( Array.isArray( arr ) ) return arr.slice( st, st + ct );
+			else return new arr.constructor( arr.buffer, st * arr.BYTES_PER_ELEMENT, ct );
+
+		}
+
+		// Returns the string for a geometry's attribute
+		function getAttribute( attr, name, params, type ) {
+
+			var array = attrBufferToArray( attr );
+			var res =
+					`<source id="${ name }">` +
+
+					`<float_array id="${ name }-array" count="${ array.length }">` +
+					array.join( ' ' ) +
+					'</float_array>' +
+
+					'<technique_common>' +
+					`<accessor source="#${ name }-array" count="${ Math.floor( array.length / attr.itemSize ) }" stride="${ attr.itemSize }">` +
+
+					params.map( n => `<param name="${ n }" type="${ type }" />` ).join( '' ) +
+
+					'</accessor>' +
+					'</technique_common>' +
+					'</source>';
+
+			return res;
+
+		}
+
+		// Returns the string for a node's transform information
+		var transMat;
+		function getTransform( o ) {
+
+			// ensure the object's matrix is up to date
+			// before saving the transform
+			o.updateMatrix();
+
+			transMat = transMat || new Matrix4();
+			transMat.copy( o.matrix );
+			transMat.transpose();
+			return `<matrix>${ transMat.toArray().join( ' ' ) }</matrix>`;
+
+		}
+
+		// Process the given piece of geometry into the geometry library
+		// Returns the mesh id
+		function processGeometry( g ) {
+
+			var info = geometryInfo.get( g );
+
+			if ( ! info ) {
+
+				// convert the geometry to bufferGeometry if it isn't already
+				var bufferGeometry = g;
+				if ( bufferGeometry instanceof Geometry ) {
+
+					bufferGeometry = ( new BufferGeometry() ).fromGeometry( bufferGeometry );
+
+				}
+
+				var meshid = `Mesh${ libraryGeometries.length + 1 }`;
+
+				var indexCount =
+					bufferGeometry.index ?
+						bufferGeometry.index.count * bufferGeometry.index.itemSize :
+						bufferGeometry.attributes.position.count;
+
+				var groups =
+					bufferGeometry.groups != null && bufferGeometry.groups.length !== 0 ?
+						bufferGeometry.groups :
+						[ { start: 0, count: indexCount, materialIndex: 0 } ];
+
+				var gnode = `<geometry id="${ meshid }" name="${ g.name }"><mesh>`;
+
+				// define the geometry node and the vertices for the geometry
+				var posName = `${ meshid }-position`;
+				var vertName = `${ meshid }-vertices`;
+				gnode += getAttribute( bufferGeometry.attributes.position, posName, [ 'X', 'Y', 'Z' ], 'float' );
+				gnode += `<vertices id="${ vertName }"><input semantic="POSITION" source="#${ posName }" /></vertices>`;
+
+				// NOTE: We're not optimizing the attribute arrays here, so they're all the same length and
+				// can therefore share the same triangle indices. However, MeshLab seems to have trouble opening
+				// models with attributes that share an offset.
+				// MeshLab Bug#424: https://sourceforge.net/p/meshlab/bugs/424/
+
+				// serialize normals
+				var triangleInputs = `<input semantic="VERTEX" source="#${ vertName }" offset="0" />`;
+				if ( 'normal' in bufferGeometry.attributes ) {
+
+					var normName = `${ meshid }-normal`;
+					gnode += getAttribute( bufferGeometry.attributes.normal, normName, [ 'X', 'Y', 'Z' ], 'float' );
+					triangleInputs += `<input semantic="NORMAL" source="#${ normName }" offset="0" />`;
+
+				}
+
+				// serialize uvs
+				if ( 'uv' in bufferGeometry.attributes ) {
+
+					var uvName = `${ meshid }-texcoord`;
+					gnode += getAttribute( bufferGeometry.attributes.uv, uvName, [ 'S', 'T' ], 'float' );
+					triangleInputs += `<input semantic="TEXCOORD" source="#${ uvName }" offset="0" set="0" />`;
+
+				}
+
+				// serialize uvs
+				if ( 'uv2' in bufferGeometry.attributes ) {
+
+					var uvName = `${ meshid }-texcoord1`;
+					gnode += getAttribute( bufferGeometry.attributes.uv2, uvName, [ 'S', 'T' ], 'float' );
+					triangleInputs += `<input semantic="TEXCOORD" source="#${ uvName }" offset="1" set="1" />`;
+
+				}
+				// serialize uvs
+				if ( 'uv3' in bufferGeometry.attributes ) {
+
+					var uvName = `${ meshid }-texcoord2`;
+					gnode += getAttribute( bufferGeometry.attributes.uv3, uvName, [ 'S', 'T' ], 'float' );
+					triangleInputs += `<input semantic="TEXCOORD" source="#${ uvName }" offset="2" set="2" />`;
+
+				}
+
+				// // serialize uvs
+				// if ( 'tangent' in bufferGeometry.attributes ) {
+				//
+				// 	var uvName = `${ meshid }-tangent`;
+				// 	gnode += getAttribute( bufferGeometry.attributes.tangent, uvName, [ 'S', 'T' ], 'float' );
+				// 	triangleInputs += `<input semantic="TANGENT" source="#${ uvName }" offset="0" set="0" />`;
+				//
+				// }
+
+				// serialize colors
+				if ( 'color' in bufferGeometry.attributes ) {
+
+					var colName = `${ meshid }-color`;
+					gnode += getAttribute( bufferGeometry.attributes.color, colName, [ 'X', 'Y', 'Z' ], 'uint8' );
+					triangleInputs += `<input semantic="COLOR" source="#${ colName }" offset="0" />`;
+
+				}
+
+				var indexArray = null;
+				if ( bufferGeometry.index ) {
+
+					indexArray = attrBufferToArray( bufferGeometry.index );
+
+				} else {
+
+					indexArray = new Array( indexCount );
+					for ( var i = 0, l = indexArray.length; i < l; i ++ ) indexArray[ i ] = i;
+
+				}
+
+				for ( var i = 0, l = groups.length; i < l; i ++ ) {
+
+					var group = groups[ i ];
+					var subarr = subArray( indexArray, group.start, group.count );
+					var polycount = subarr.length / 3;
+					gnode += `<triangles material="MESH_MATERIAL_${ group.materialIndex }" count="${ polycount }">`;
+					gnode += triangleInputs;
+
+					gnode += `<p>${ subarr.join( ' ' ) }</p>`;
+					gnode += '</triangles>';
+
+				}
+
+				gnode += `</mesh></geometry>`;
+
+				libraryGeometries.push( gnode );
+
+				info = { meshid: meshid, bufferGeometry: bufferGeometry };
+				geometryInfo.set( g, info );
+
+			}
+
+			return info;
+
+		}
+
+		// Process the given texture into the image library
+		// Returns the image library
+		function processTexture( tex ) {
+
+			var texid = imageMap.get( tex );
+			if ( texid == null ) {
+
+				texid = `image-${ libraryImages.length + 1 }`;
+
+				var ext = 'png';
+				var name = tex.name || texid;
+				var imageNode = `<image id="${ texid }" name="${ name }">`;
+
+				if ( version === '1.5.0' ) {
+
+					imageNode += `<init_from><ref>${ options.textureDirectory }${ name }.${ ext }</ref></init_from>`;
+
+				} else {
+
+					// version image node 1.4.1
+					imageNode += `<init_from>${ options.textureDirectory }${ name }.${ ext }</init_from>`;
+
+				}
+
+				imageNode += '</image>';
+
+				libraryImages.push( imageNode );
+				imageMap.set( tex, texid );
+				textures.push( {
+					directory: options.textureDirectory,
+					name,
+					ext,
+					data: imageToData( tex.image, ext ),
+					original: tex
+				} );
+
+			}
+
+			return texid;
+
+		}
+
+		// Process the given material into the material and effect libraries
+		// Returns the material id
+		function processMaterial( m ) {
+
+			var matid = materialMap.get( m );
+
+			if ( matid == null ) {
+
+				matid = `Mat${ libraryEffects.length + 1 }`;
+
+				var type = 'phong';
+
+				if ( m instanceof MeshLambertMaterial ) {
+
+					type = 'lambert';
+
+				} else if ( m instanceof MeshBasicMaterial ) {
+
+					type = 'constant';
+
+					if ( m.map !== null ) {
+
+						// The Collada spec does not support diffuse texture maps with the
+						// constant shader type.
+						// mrdoob/three.js#15469
+						console.warn( 'ColladaExporter: Texture maps not supported with MeshBasicMaterial.' );
+
+					}
+
+				}
+
+				var emissive = m.emissive ? m.emissive : new Color( 0, 0, 0 );
+				var diffuse = m.color ? m.color : new Color( 0, 0, 0 );
+				var specular = m.specular ? m.specular : new Color( 1, 1, 1 );
+				var shininess = m.shininess || 0;
+				var reflectivity = m.reflectivity || 0;
+
+				// Do not export and alpha map for the reasons mentioned in issue (#13792)
+				// in THREE.js alpha maps are black and white, but collada expects the alpha
+				// channel to specify the transparency
+				var transparencyNode = '';
+				if ( m.transparent === true ) {
+
+					transparencyNode +=
+						`<transparent>` +
+						(
+							m.map ?
+								`<texture texture="diffuse-sampler"></texture>` :
+								'<float>1</float>'
+						) +
+						'</transparent>';
+
+					if ( m.opacity < 1 ) {
+
+						transparencyNode += `<transparency><float>${ m.opacity }</float></transparency>`;
+
+					}
+
+				}
+
+				var techniqueNode = `<technique sid="common"><${ type }>` +
+
+					'<emission>' +
+
+					(
+						m.emissiveMap ?
+							'<texture texture="emissive-sampler" texcoord="TEXCOORD" />' :
+							`<color sid="emission">${ emissive.r } ${ emissive.g } ${ emissive.b } 1</color>`
+					) +
+
+					'</emission>' +
+
+					(
+						type !== 'constant' ?
+							'<diffuse>' +
+
+						(
+							m.map ?
+								'<texture texture="diffuse-sampler" texcoord="TEXCOORD" />' :
+								`<color sid="diffuse">${ diffuse.r } ${ diffuse.g } ${ diffuse.b } 1</color>`
+						) +
+						'</diffuse>'
+							: ''
+					) +
+
+					(
+						type === 'phong' ?
+							`<specular><color sid="specular">${ specular.r } ${ specular.g } ${ specular.b } 1</color></specular>` +
+
+						'<shininess>' +
+
+						(
+							m.specularMap ?
+								'<texture texture="specular-sampler" texcoord="TEXCOORD" />' :
+								`<float sid="shininess">${ shininess }</float>`
+						) +
+
+						'</shininess>'
+							: ''
+					) +
+
+					`<reflective><color>${ diffuse.r } ${ diffuse.g } ${ diffuse.b } 1</color></reflective>` +
+
+					`<reflectivity><float>${ reflectivity }</float></reflectivity>` +
+
+					transparencyNode +
+
+					`</${ type }></technique>`;
+
+				var effectnode =
+					`<effect id="${ matid }-effect">` +
+					'<profile_COMMON>' +
+
+					(
+						m.map ?
+							'<newparam sid="diffuse-surface"><surface type="2D">' +
+							`<init_from>${ processTexture( m.map ) }</init_from>` +
+							'</surface></newparam>' +
+							'<newparam sid="diffuse-sampler"><sampler2D><source>diffuse-surface</source></sampler2D></newparam>' :
+							''
+					) +
+
+					(
+						m.specularMap ?
+							'<newparam sid="specular-surface"><surface type="2D">' +
+							`<init_from>${ processTexture( m.specularMap ) }</init_from>` +
+							'</surface></newparam>' +
+							'<newparam sid="specular-sampler"><sampler2D><source>specular-surface</source></sampler2D></newparam>' :
+							''
+					) +
+
+					(
+						m.emissiveMap ?
+							'<newparam sid="emissive-surface"><surface type="2D">' +
+							`<init_from>${ processTexture( m.emissiveMap ) }</init_from>` +
+							'</surface></newparam>' +
+							'<newparam sid="emissive-sampler"><sampler2D><source>emissive-surface</source></sampler2D></newparam>' :
+							''
+					) +
+
+					techniqueNode +
+
+					(
+						m.side === DoubleSide ?
+							`<extra><technique><double_sided sid="double_sided" type="int">1</double_sided></technique></extra>` :
+							''
+					) +
+
+					'</profile_COMMON>' +
+
+					'</effect>';
+
+				libraryMaterials.push( `<material id="${ matid }" name="${ m.name }"><instance_effect url="#${ matid }-effect" /></material>` );
+				libraryEffects.push( effectnode );
+				materialMap.set( m, matid );
+
+			}
+
+			return matid;
+
+		}
+
+		// Recursively process the object into a scene
+		function processObject( o ) {
+
+			var node = `<node name="${ o.name }">`;
+
+			node += getTransform( o );
+
+			if ( o instanceof Mesh && o.geometry != null ) {
+
+				// function returns the id associated with the mesh and a "BufferGeometry" version
+				// of the geometry in case it's not a geometry.
+				var geomInfo = processGeometry( o.geometry );
+				var meshid = geomInfo.meshid;
+				var geometry = geomInfo.bufferGeometry;
+
+				// ids of the materials to bind to the geometry
+				var matids = null;
+				var matidsArray = [];
+
+				// get a list of materials to bind to the sub groups of the geometry.
+				// If the amount of subgroups is greater than the materials, than reuse
+				// the materials.
+				var mat = o.material || new MeshBasicMaterial();
+				var materials = Array.isArray( mat ) ? mat : [ mat ];
+				if ( geometry.groups.length > materials.length ) {
+
+					matidsArray = new Array( geometry.groups.length );
+
+				} else {
+
+					matidsArray = new Array( materials.length );
+
+				}
+				matids = matidsArray.fill()
+					.map( ( v, i ) => processMaterial( materials[ i % materials.length ] ) );
+
+				node +=
+					`<instance_geometry url="#${ meshid }">` +
+
+					(
+						matids != null ?
+							'<bind_material><technique_common>' +
+							matids.map( ( id, i ) =>
+
+								`<instance_material symbol="MESH_MATERIAL_${ i }" target="#${ id }" >` +
+
+								'<bind_vertex_input semantic="TEXCOORD" input_semantic="TEXCOORD" input_set="0" />' +
+
+								'</instance_material>'
+							).join( '' ) +
+							'</technique_common></bind_material>' :
+							''
+					) +
+
+					'</instance_geometry>';
+
+			}
+
+			o.children.forEach( c => node += processObject( c ) );
+
+			node += '</node>';
+
+			return node;
+
+		}
+
+		var geometryInfo = new WeakMap();
+		var materialMap = new WeakMap();
+		var imageMap = new WeakMap();
+		var textures = [];
+
+		var libraryImages = [];
+		var libraryGeometries = [];
+		var libraryEffects = [];
+		var libraryMaterials = [];
+		var libraryVisualScenes = processObject( object );
+
+		var specLink = version === '1.4.1' ? 'http://www.collada.org/2005/11/COLLADASchema' : 'https://www.khronos.org/collada/';
+		var dae =
+			'<?xml version="1.0" encoding="UTF-8" standalone="no" ?>' +
+			`<COLLADA xmlns="${ specLink }" version="${ version }">` +
+			'<asset>' +
+			(
+				'<contributor>' +
+				'<authoring_tool>THREE.js Collada Exporter</authoring_tool>' +
+				( options.author !== null ? `<author>${ options.author }</author>` : '' ) +
+				'</contributor>' +
+				`<created>${ ( new Date() ).toISOString() }</created>` +
+				`<modified>${ ( new Date() ).toISOString() }</modified>` +
+				'<up_axis>Y_UP</up_axis>'
+			) +
+			'</asset>';
+
+		dae += `<library_images>${ libraryImages.join( '' ) }</library_images>`;
+
+		dae += `<library_effects>${ libraryEffects.join( '' ) }</library_effects>`;
+
+		dae += `<library_materials>${ libraryMaterials.join( '' ) }</library_materials>`;
+
+		dae += `<library_geometries>${ libraryGeometries.join( '' ) }</library_geometries>`;
+
+		dae += `<library_visual_scenes><visual_scene id="Scene" name="scene">${ libraryVisualScenes }</visual_scene></library_visual_scenes>`;
+
+		dae += '<scene><instance_visual_scene url="#Scene"/></scene>';
+
+		dae += '</COLLADA>';
+
+		var res = {
+			data: format( dae ),
+			textures
+		};
+
+		if ( typeof onDone === 'function' ) {
+
+			requestAnimationFrame( () => onDone( res ) );
+
+		}
+
+		return res;
+
+	}
+
+};
+
+/**
  * @author fernandojsg / http://fernandojsg.com
  * @author Don McCurdy / https://www.donmccurdy.com
  * @author Takahiro / https://github.com/takahirox
@@ -71715,6 +72093,7 @@ GLTFExporter.prototype = {
 
 			var gltfNode = {};
 
+			// 导出 rotate position scale 或者 matrix
 			if ( options.trs ) {
 
 				var rotation = object.quaternion.toArray();
@@ -75801,4 +76180,1007 @@ DRACOLoader._loadArrayBuffer = function (src) {
 
 };
 
-export { ACESFilmicToneMapping, AddEquation, AddOperation, AdditiveBlending, AlphaFormat, AlwaysDepth, AmbientLight, AmbientLightProbe, AnimationClip, AnimationLoader, AnimationMixer, AnimationObjectGroup, AnimationUtils, ArcCurve, ArrayCamera, ArrowHelper, Audio, AudioAnalyser, AudioContext, AudioListener, AudioLoader, AxesHelper, AxisHelper, BackSide, BasicDepthPacking, BasicShadowMap, BinaryTextureLoader, Bone, BooleanKeyframeTrack, BoundingBoxHelper, Box2, Box3, Box3Helper, BoxBufferGeometry, BoxGeometry, BoxHelper, BufferAttribute, BufferGeometry, BufferGeometryLoader, BufferGeometryUtils, ByteType, Cache, Camera, CameraHelper, CanvasRenderer, CanvasTexture, CatmullRomCurve3, CineonToneMapping, CircleBufferGeometry, CircleGeometry, ClampToEdgeWrapping, Clock, ClosedSplineCurve3, ColladaLoader, Color, ColorKeyframeTrack, CompressedTexture, CompressedTextureLoader, ConeBufferGeometry, ConeGeometry, CopyShader, CubeCamera, BoxGeometry as CubeGeometry, CubeReflectionMapping, CubeRefractionMapping, CubeTexture, CubeTextureLoader, CubeUVReflectionMapping, CubeUVRefractionMapping, CubicBezierCurve, CubicBezierCurve3, CubicInterpolant, CullFaceBack, CullFaceFront, CullFaceFrontBack, CullFaceNone, Curve, CurvePath, CustomBlending, CylinderBufferGeometry, CylinderGeometry, Cylindrical, DRACOLoader, DataTexture, DataTexture2DArray, DataTexture3D, DataTextureLoader, DefaultLoadingManager, DepthFormat, DepthStencilFormat, DepthTexture, DirectionalLight, DirectionalLightHelper, DirectionalLightShadow, DiscreteInterpolant, DodecahedronBufferGeometry, DodecahedronGeometry, DoubleSide, DstAlphaFactor, DstColorFactor, DynamicBufferAttribute, EdgesGeometry, EdgesHelper, EditorControls, EffectComposer, EllipseCurve, EqualDepth, EquirectangularReflectionMapping, EquirectangularRefractionMapping, Euler, EventDispatcher, ExtrudeBufferGeometry, ExtrudeGeometry, FBXLoader, FXAAShader, Face3, Face4, FaceColors, FaceNormalsHelper, FileLoader, FlatShading, Float32Attribute, Float32BufferAttribute, Float64Attribute, Float64BufferAttribute, FloatType, Fog, FogExp2, Font, FontLoader, FrontFaceDirectionCCW, FrontFaceDirectionCW, FrontSide, Frustum, GLTFExporter, GLTFLoader, GammaEncoding, Geometry, GeometryUtils, GreaterDepth, GreaterEqualDepth, GridHelper, Group, HalfFloatType, HemisphereLight, HemisphereLightHelper, HemisphereLightProbe, IcosahedronBufferGeometry, IcosahedronGeometry, ImageBitmapLoader, ImageLoader, ImageUtils, ImmediateRenderObject, InstancedBufferAttribute, InstancedBufferGeometry, InstancedInterleavedBuffer, Int16Attribute, Int16BufferAttribute, Int32Attribute, Int32BufferAttribute, Int8Attribute, Int8BufferAttribute, IntType, InterleavedBuffer, InterleavedBufferAttribute, Interpolant, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, JSONLoader, KTXLoader, KeyframeTrack, LOD, LatheBufferGeometry, LatheGeometry, Layers, LensFlare, LessDepth, LessEqualDepth, Light, LightProbe, LightProbeHelper, LightShadow, Line, Line3, LineBasicMaterial, LineCurve, LineCurve3, LineDashedMaterial, LineLoop, LinePieces, LineSegments, LineStrip, LinearEncoding, LinearFilter, LinearInterpolant, LinearMipMapLinearFilter, LinearMipMapNearestFilter, LinearToneMapping, Loader, LoaderUtils, LoadingManager, LogLuvEncoding, LoopOnce, LoopPingPong, LoopRepeat, LuminanceAlphaFormat, LuminanceFormat, MOUSE, MTLLoader, Material, MaterialLoader, _Math as Math, Matrix3, Matrix4, MaxEquation, Mesh, MeshBasicMaterial, MeshDepthMaterial, MeshDistanceMaterial, MeshFaceMaterial, MeshLambertMaterial, MeshMatcapMaterial, MeshNormalMaterial, MeshPhongMaterial, MeshPhysicalMaterial, MeshStandardMaterial, MeshToonMaterial, MinEquation, MirroredRepeatWrapping, MixOperation, MultiMaterial, MultiplyBlending, MultiplyOperation, NearestFilter, NearestMipMapLinearFilter, NearestMipMapNearestFilter, NeverDepth, NoBlending, NoColors, NoToneMapping, NormalBlending, NotEqualDepth, NumberKeyframeTrack, OBJExporter, OBJLoader, Object3D, ObjectLoader, ObjectSpaceNormalMap, OctahedronBufferGeometry, OctahedronGeometry, OneFactor, OneMinusDstAlphaFactor, OneMinusDstColorFactor, OneMinusSrcAlphaFactor, OneMinusSrcColorFactor, OrthographicCamera, OutlinePass, PCFShadowMap, PCFSoftShadowMap, ParametricBufferGeometry, ParametricGeometry, Particle, ParticleBasicMaterial, ParticleSystem, ParticleSystemMaterial, Pass, Path, PerspectiveCamera, Plane, PlaneBufferGeometry, PlaneGeometry, PlaneHelper, PointCloud, PointCloudMaterial, PointLight, PointLightHelper, Points, PointsMaterial, PolarGridHelper, PolyhedronBufferGeometry, PolyhedronGeometry, PositionalAudio, PositionalAudioHelper, PropertyBinding, PropertyMixer, QuadraticBezierCurve, QuadraticBezierCurve3, Quaternion, QuaternionKeyframeTrack, QuaternionLinearInterpolant, REVISION, RGBADepthPacking, RGBAFormat, RGBA_ASTC_10x10_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGBDEncoding, RGBEEncoding, RGBEFormat, RGBFormat, RGBM16Encoding, RGBM7Encoding, RGB_ETC1_Format, RGB_PVRTC_2BPPV1_Format, RGB_PVRTC_4BPPV1_Format, RGB_S3TC_DXT1_Format, RawShaderMaterial, Ray, Raycaster, RaytracingRenderer, RectAreaLight, RectAreaLightHelper, RedFormat, ReinhardToneMapping, RenderPass, RepeatWrapping, ReverseSubtractEquation, RingBufferGeometry, RingGeometry, SMAAPass, SSAARenderPass, STLExporter, SVGObject, SVGRenderer, Scene, SceneUtils, ShaderChunk, ShaderLib, ShaderMaterial, ShaderPass, ShadowMaterial, Shape, ShapeBufferGeometry, ShapeGeometry, ShapePath, ShapeUtils, ShortType, Skeleton, SkeletonHelper, SkinnedMesh, SmoothShading, SoftwareRenderer, Sphere, SphereBufferGeometry, SphereGeometry, Spherical, SphericalHarmonics3, SphericalReflectionMapping, Spline, SplineCurve, SplineCurve3, SpotLight, SpotLightHelper, SpotLightShadow, Sprite, SpriteMaterial, SrcAlphaFactor, SrcAlphaSaturateFactor, SrcColorFactor, StereoCamera, StringKeyframeTrack, SubtractEquation, SubtractiveBlending, TGALoader, TangentSpaceNormalMap, TeapotBufferGeometry, TetrahedronBufferGeometry, TetrahedronGeometry, TextBufferGeometry, TextGeometry, Texture, TextureLoader, TorusBufferGeometry, TorusGeometry, TorusKnotBufferGeometry, TorusKnotGeometry, TransformControls, TransformControlsGizmo, TransformControlsPlane, Triangle, TriangleFanDrawMode, TriangleStripDrawMode$1 as TriangleStripDrawMode, TrianglesDrawMode, TubeBufferGeometry, TubeGeometry, UVMapping, Uint16Attribute, Uint16BufferAttribute, Uint32Attribute, Uint32BufferAttribute, Uint8Attribute, Uint8BufferAttribute, Uint8ClampedAttribute, Uint8ClampedBufferAttribute, Uncharted2ToneMapping, Uniform, UniformsLib, UniformsUtils, UnsignedByteType, UnsignedInt248Type, UnsignedIntType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedShort565Type, UnsignedShortType, VREffect, Vector2, Vector3, Vector4, VectorKeyframeTrack, Vertex, VertexColors, VertexNormalsHelper, VideoTexture, WebGLMultisampleRenderTarget, WebGLRenderTarget, WebGLRenderTargetCube, WebGLRenderer, WebGLUtils, WireframeGeometry, WireframeHelper, WrapAroundEnding, XHRLoader, ZeroCurvatureEnding, ZeroFactor, ZeroSlopeEnding, sRGBEncoding };
+/*
+ *	 PVRLoader
+ *   Author: pierre lepers
+ *   Date: 17/09/2014 11:09
+ *
+ *	 PVR v2 (legacy) parser
+ *   TODO : Add Support for PVR v3 format
+ *   TODO : implement loadMipmaps option
+ */
+
+var PVRLoader = function ( manager ) {
+
+	CompressedTextureLoader.call( this, manager );
+
+	this._parser = PVRLoader.parse;
+
+};
+
+PVRLoader.prototype = Object.create( CompressedTextureLoader.prototype );
+PVRLoader.prototype.constructor = PVRLoader;
+
+
+PVRLoader.parse = function ( buffer, loadMipmaps ) {
+
+	var headerLengthInt = 13;
+	var header = new Uint32Array( buffer, 0, headerLengthInt );
+
+	var pvrDatas = {
+		buffer: buffer,
+		header: header,
+		loadMipmaps: loadMipmaps
+	};
+
+	if ( header[ 0 ] === 0x03525650 ) {
+
+		// PVR v3
+
+		return PVRLoader._parseV3( pvrDatas );
+
+	} else if ( header[ 11 ] === 0x21525650 ) {
+
+		// PVR v2
+
+		return PVRLoader._parseV2( pvrDatas );
+
+	} else {
+
+		console.error( 'THREE.PVRLoader: Unknown PVR format.' );
+
+	}
+
+};
+
+PVRLoader._parseV3 = function ( pvrDatas ) {
+
+	var header = pvrDatas.header;
+	var bpp, format;
+
+
+	var metaLen = header[ 12 ],
+		pixelFormat = header[ 2 ],
+		height = header[ 6 ],
+		width = header[ 7 ],
+		// numSurfs = header[ 9 ],
+		numFaces = header[ 10 ],
+		numMipmaps = header[ 11 ];
+
+	switch ( pixelFormat ) {
+
+		case 0 : // PVRTC 2bpp RGB
+			bpp = 2;
+			format = RGB_PVRTC_2BPPV1_Format;
+			break;
+
+		case 1 : // PVRTC 2bpp RGBA
+			bpp = 2;
+			format = RGBA_PVRTC_2BPPV1_Format;
+			break;
+
+		case 2 : // PVRTC 4bpp RGB
+			bpp = 4;
+			format = RGB_PVRTC_4BPPV1_Format;
+			break;
+
+		case 3 : // PVRTC 4bpp RGBA
+			bpp = 4;
+			format = RGBA_PVRTC_4BPPV1_Format;
+			break;
+
+		default :
+			console.error( 'THREE.PVRLoader: Unsupported PVR format:', pixelFormat );
+
+	}
+
+	pvrDatas.dataPtr = 52 + metaLen;
+	pvrDatas.bpp = bpp;
+	pvrDatas.format = format;
+	pvrDatas.width = width;
+	pvrDatas.height = height;
+	pvrDatas.numSurfaces = numFaces;
+	pvrDatas.numMipmaps = numMipmaps;
+	pvrDatas.isCubemap 	= ( numFaces === 6 );
+
+	return PVRLoader._extract( pvrDatas );
+
+};
+
+PVRLoader._parseV2 = function ( pvrDatas ) {
+
+	var header = pvrDatas.header;
+
+	var headerLength = header[ 0 ],
+		height = header[ 1 ],
+		width = header[ 2 ],
+		numMipmaps = header[ 3 ],
+		flags = header[ 4 ],
+		// dataLength = header[ 5 ],
+		// bpp =  header[ 6 ],
+		// bitmaskRed = header[ 7 ],
+		// bitmaskGreen = header[ 8 ],
+		// bitmaskBlue = header[ 9 ],
+		bitmaskAlpha = header[ 10 ],
+		// pvrTag = header[ 11 ],
+		numSurfs = header[ 12 ];
+
+
+	var TYPE_MASK = 0xff;
+	var PVRTC_2 = 24,
+		PVRTC_4 = 25;
+
+	var formatFlags = flags & TYPE_MASK;
+
+	var bpp, format;
+	var _hasAlpha = bitmaskAlpha > 0;
+
+	if ( formatFlags === PVRTC_4 ) {
+
+		format = _hasAlpha ? RGBA_PVRTC_4BPPV1_Format : RGB_PVRTC_4BPPV1_Format;
+		bpp = 4;
+
+	} else if ( formatFlags === PVRTC_2 ) {
+
+		format = _hasAlpha ? RGBA_PVRTC_2BPPV1_Format : RGB_PVRTC_2BPPV1_Format;
+		bpp = 2;
+
+	} else {
+
+		console.error( 'THREE.PVRLoader: Unknown PVR format:', formatFlags );
+
+	}
+
+	pvrDatas.dataPtr = headerLength;
+	pvrDatas.bpp = bpp;
+	pvrDatas.format = format;
+	pvrDatas.width = width;
+	pvrDatas.height = height;
+	pvrDatas.numSurfaces = numSurfs;
+	pvrDatas.numMipmaps = numMipmaps + 1;
+
+	// guess cubemap type seems tricky in v2
+	// it juste a pvr containing 6 surface (no explicit cubemap type)
+	pvrDatas.isCubemap 	= ( numSurfs === 6 );
+
+	return PVRLoader._extract( pvrDatas );
+
+};
+
+
+PVRLoader._extract = function ( pvrDatas ) {
+
+	var pvr = {
+		mipmaps: [],
+		width: pvrDatas.width,
+		height: pvrDatas.height,
+		format: pvrDatas.format,
+		mipmapCount: pvrDatas.numMipmaps,
+		isCubemap: pvrDatas.isCubemap
+	};
+
+	var buffer = pvrDatas.buffer;
+
+	var dataOffset = pvrDatas.dataPtr,
+		bpp = pvrDatas.bpp,
+		numSurfs = pvrDatas.numSurfaces,
+		dataSize = 0,
+		blockSize = 0,
+		blockWidth = 0,
+		blockHeight = 0,
+		widthBlocks = 0,
+		heightBlocks = 0;
+
+	if ( bpp === 2 ) {
+
+		blockWidth = 8;
+		blockHeight = 4;
+
+	} else {
+
+		blockWidth = 4;
+		blockHeight = 4;
+
+	}
+
+	blockSize = ( blockWidth * blockHeight ) * bpp / 8;
+
+	pvr.mipmaps.length = pvrDatas.numMipmaps * numSurfs;
+
+	var mipLevel = 0;
+
+	while ( mipLevel < pvrDatas.numMipmaps ) {
+
+		var sWidth = pvrDatas.width >> mipLevel,
+			sHeight = pvrDatas.height >> mipLevel;
+
+		widthBlocks = sWidth / blockWidth;
+		heightBlocks = sHeight / blockHeight;
+
+		// Clamp to minimum number of blocks
+		if ( widthBlocks < 2 ) widthBlocks = 2;
+		if ( heightBlocks < 2 ) heightBlocks = 2;
+
+		dataSize = widthBlocks * heightBlocks * blockSize;
+
+		for ( var surfIndex = 0; surfIndex < numSurfs; surfIndex ++ ) {
+
+			var byteArray = new Uint8Array( buffer, dataOffset, dataSize );
+
+			var mipmap = {
+				data: byteArray,
+				width: sWidth,
+				height: sHeight
+			};
+
+			pvr.mipmaps[ surfIndex * pvrDatas.numMipmaps + mipLevel ] = mipmap;
+
+			dataOffset += dataSize;
+
+		}
+
+		mipLevel ++;
+
+	}
+
+	return pvr;
+
+};
+
+/*
+ * @author mrdoob / http://mrdoob.com/
+ */
+
+var DDSLoader = function ( manager ) {
+
+	CompressedTextureLoader.call( this, manager );
+
+	this._parser = DDSLoader.parse;
+
+};
+
+DDSLoader.prototype = Object.create( CompressedTextureLoader.prototype );
+DDSLoader.prototype.constructor = DDSLoader;
+
+DDSLoader.parse = function ( buffer, loadMipmaps ) {
+
+	var dds = { mipmaps: [], width: 0, height: 0, format: null, mipmapCount: 1 };
+
+	// Adapted from @toji's DDS utils
+	// https://github.com/toji/webgl-texture-utils/blob/master/texture-util/dds.js
+
+	// All values and structures referenced from:
+	// http://msdn.microsoft.com/en-us/library/bb943991.aspx/
+
+	var DDS_MAGIC = 0x20534444;
+
+	var DDSD_MIPMAPCOUNT = 0x20000;
+
+	var DDSCAPS2_CUBEMAP = 0x200,
+		DDSCAPS2_CUBEMAP_POSITIVEX = 0x400,
+		DDSCAPS2_CUBEMAP_NEGATIVEX = 0x800,
+		DDSCAPS2_CUBEMAP_POSITIVEY = 0x1000,
+		DDSCAPS2_CUBEMAP_NEGATIVEY = 0x2000,
+		DDSCAPS2_CUBEMAP_POSITIVEZ = 0x4000,
+		DDSCAPS2_CUBEMAP_NEGATIVEZ = 0x8000;
+
+	var DDPF_FOURCC = 0x4;
+
+	function fourCCToInt32( value ) {
+
+		return value.charCodeAt( 0 ) +
+			( value.charCodeAt( 1 ) << 8 ) +
+			( value.charCodeAt( 2 ) << 16 ) +
+			( value.charCodeAt( 3 ) << 24 );
+
+	}
+
+	function int32ToFourCC( value ) {
+
+		return String.fromCharCode(
+			value & 0xff,
+			( value >> 8 ) & 0xff,
+			( value >> 16 ) & 0xff,
+			( value >> 24 ) & 0xff
+		);
+
+	}
+
+	function loadARGBMip( buffer, dataOffset, width, height ) {
+
+		var dataLength = width * height * 4;
+		var srcBuffer = new Uint8Array( buffer, dataOffset, dataLength );
+		var byteArray = new Uint8Array( dataLength );
+		var dst = 0;
+		var src = 0;
+		for ( var y = 0; y < height; y ++ ) {
+
+			for ( var x = 0; x < width; x ++ ) {
+
+				var b = srcBuffer[ src ]; src ++;
+				var g = srcBuffer[ src ]; src ++;
+				var r = srcBuffer[ src ]; src ++;
+				var a = srcBuffer[ src ]; src ++;
+				byteArray[ dst ] = r; dst ++;	//r
+				byteArray[ dst ] = g; dst ++;	//g
+				byteArray[ dst ] = b; dst ++;	//b
+				byteArray[ dst ] = a; dst ++;	//a
+
+			}
+
+		}
+		return byteArray;
+
+	}
+
+	var FOURCC_DXT1 = fourCCToInt32( "DXT1" );
+	var FOURCC_DXT3 = fourCCToInt32( "DXT3" );
+	var FOURCC_DXT5 = fourCCToInt32( "DXT5" );
+	var FOURCC_ETC1 = fourCCToInt32( "ETC1" );
+
+	var headerLengthInt = 31; // The header length in 32 bit ints
+
+	// Offsets into the header array
+
+	var off_magic = 0;
+
+	var off_size = 1;
+	var off_flags = 2;
+	var off_height = 3;
+	var off_width = 4;
+
+	var off_mipmapCount = 7;
+
+	var off_pfFlags = 20;
+	var off_pfFourCC = 21;
+	var off_RGBBitCount = 22;
+	var off_RBitMask = 23;
+	var off_GBitMask = 24;
+	var off_BBitMask = 25;
+	var off_ABitMask = 26;
+	var off_caps2 = 28;
+
+	// Parse header
+
+	var header = new Int32Array( buffer, 0, headerLengthInt );
+
+	if ( header[ off_magic ] !== DDS_MAGIC ) {
+
+		console.error( 'THREE.DDSLoader.parse: Invalid magic number in DDS header.' );
+		return dds;
+
+	}
+
+	if ( ! header[ off_pfFlags ] & DDPF_FOURCC ) {
+
+		console.error( 'THREE.DDSLoader.parse: Unsupported format, must contain a FourCC code.' );
+		return dds;
+
+	}
+
+	var blockBytes;
+
+	var fourCC = header[ off_pfFourCC ];
+
+	var isRGBAUncompressed = false;
+
+	switch ( fourCC ) {
+
+		case FOURCC_DXT1:
+
+			blockBytes = 8;
+			dds.format = RGB_S3TC_DXT1_Format;
+			break;
+
+		case FOURCC_DXT3:
+
+			blockBytes = 16;
+			dds.format = RGBA_S3TC_DXT3_Format;
+			break;
+
+		case FOURCC_DXT5:
+
+			blockBytes = 16;
+			dds.format = RGBA_S3TC_DXT5_Format;
+			break;
+
+		case FOURCC_ETC1:
+
+			blockBytes = 8;
+			dds.format = RGB_ETC1_Format;
+			break;
+
+		default:
+
+			if ( header[ off_RGBBitCount ] === 32
+				&& header[ off_RBitMask ] & 0xff0000
+				&& header[ off_GBitMask ] & 0xff00
+				&& header[ off_BBitMask ] & 0xff
+				&& header[ off_ABitMask ] & 0xff000000 ) {
+
+				isRGBAUncompressed = true;
+				blockBytes = 64;
+				dds.format = RGBAFormat;
+
+			} else {
+
+				console.error( 'THREE.DDSLoader.parse: Unsupported FourCC code ', int32ToFourCC( fourCC ) );
+				return dds;
+
+			}
+
+	}
+
+	dds.mipmapCount = 1;
+
+	if ( header[ off_flags ] & DDSD_MIPMAPCOUNT && loadMipmaps !== false ) {
+
+		dds.mipmapCount = Math.max( 1, header[ off_mipmapCount ] );
+
+	}
+
+	var caps2 = header[ off_caps2 ];
+	dds.isCubemap = caps2 & DDSCAPS2_CUBEMAP ? true : false;
+	if ( dds.isCubemap && (
+		! ( caps2 & DDSCAPS2_CUBEMAP_POSITIVEX ) ||
+		! ( caps2 & DDSCAPS2_CUBEMAP_NEGATIVEX ) ||
+		! ( caps2 & DDSCAPS2_CUBEMAP_POSITIVEY ) ||
+		! ( caps2 & DDSCAPS2_CUBEMAP_NEGATIVEY ) ||
+		! ( caps2 & DDSCAPS2_CUBEMAP_POSITIVEZ ) ||
+		! ( caps2 & DDSCAPS2_CUBEMAP_NEGATIVEZ )
+	) ) {
+
+		console.error( 'THREE.DDSLoader.parse: Incomplete cubemap faces' );
+		return dds;
+
+	}
+
+	dds.width = header[ off_width ];
+	dds.height = header[ off_height ];
+
+	var dataOffset = header[ off_size ] + 4;
+
+	// Extract mipmaps buffers
+
+	var faces = dds.isCubemap ? 6 : 1;
+
+	for ( var face = 0; face < faces; face ++ ) {
+
+		var width = dds.width;
+		var height = dds.height;
+
+		for ( var i = 0; i < dds.mipmapCount; i ++ ) {
+
+			if ( isRGBAUncompressed ) {
+
+				var byteArray = loadARGBMip( buffer, dataOffset, width, height );
+				var dataLength = byteArray.length;
+
+			} else {
+
+				var dataLength = Math.max( 4, width ) / 4 * Math.max( 4, height ) / 4 * blockBytes;
+				var byteArray = new Uint8Array( buffer, dataOffset, dataLength );
+
+			}
+
+			var mipmap = { "data": byteArray, "width": width, "height": height };
+			dds.mipmaps.push( mipmap );
+
+			dataOffset += dataLength;
+
+			width = Math.max( width >> 1, 1 );
+			height = Math.max( height >> 1, 1 );
+
+		}
+
+	}
+
+	return dds;
+
+};
+
+/**
+ * @author Don McCurdy / https://www.donmccurdy.com
+ * @author Austin Eng / https://github.com/austinEng
+ * @author Shrek Shao / https://github.com/shrekshao
+ */
+
+/**
+ * Loader for Basis Universal GPU Texture Codec.
+ *
+ * Basis Universal is a "supercompressed" GPU texture and texture video
+ * compression system that outputs a highly compressed intermediate file format
+ * (.basis) that can be quickly transcoded to a wide variety of GPU texture
+ * compression formats.
+ *
+ * This loader parallelizes the transcoding process across a configurable number
+ * of web workers, before transferring the transcoded compressed texture back
+ * to the main thread.
+ */
+var BasisTextureLoader = function ( manager ) {
+
+	Loader.call( this, manager );
+
+	this.transcoderPath = '';
+	this.transcoderBinary = null;
+	this.transcoderPending = null;
+
+	this.workerLimit = 4;
+	this.workerPool = [];
+	this.workerNextTaskID = 1;
+	this.workerSourceURL = '';
+	this.workerConfig = {
+		format: null,
+		astcSupported: false,
+		etcSupported: false,
+		dxtSupported: false,
+		pvrtcSupported: false,
+	};
+
+};
+
+BasisTextureLoader.prototype = Object.assign( Object.create( Loader.prototype ), {
+
+	constructor: BasisTextureLoader,
+
+	setTranscoderPath: function ( path ) {
+
+		this.transcoderPath = path;
+
+		return this;
+
+	},
+
+	setWorkerLimit: function ( workerLimit ) {
+
+		this.workerLimit = workerLimit;
+
+		return this;
+
+	},
+
+	detectSupport: function ( renderer ) {
+
+		var config = this.workerConfig;
+
+		config.astcSupported = !! renderer.extensions.get( 'WEBGL_compressed_texture_astc' );
+		config.etcSupported = !! renderer.extensions.get( 'WEBGL_compressed_texture_etc1' );
+		config.dxtSupported = !! renderer.extensions.get( 'WEBGL_compressed_texture_s3tc' );
+		config.pvrtcSupported = !! renderer.extensions.get( 'WEBGL_compressed_texture_pvrtc' )
+			|| !! renderer.extensions.get( 'WEBKIT_WEBGL_compressed_texture_pvrtc' );
+
+		if ( config.astcSupported ) {
+
+			config.format = BasisTextureLoader.BASIS_FORMAT.cTFASTC_4x4;
+
+		} else if ( config.dxtSupported ) {
+
+			config.format = BasisTextureLoader.BASIS_FORMAT.cTFBC3;
+
+		} else if ( config.pvrtcSupported ) {
+
+			config.format = BasisTextureLoader.BASIS_FORMAT.cTFPVRTC1_4_RGBA;
+
+		} else if ( config.etcSupported ) {
+
+			config.format = BasisTextureLoader.BASIS_FORMAT.cTFETC1;
+
+		} else {
+
+			throw new Error( 'THREE.BasisTextureLoader: No suitable compressed texture format found.' );
+
+		}
+
+		return this;
+
+	},
+
+	load: function ( url, onLoad, onProgress, onError ) {
+
+		var loader = new FileLoader( this.manager );
+
+		loader.setResponseType( 'arraybuffer' );
+
+		loader.load( url, ( buffer ) => {
+
+			this._createTexture( buffer )
+				.then( onLoad )
+				.catch( onError );
+
+		}, onProgress, onError );
+
+	},
+
+	/**
+	 * @param  {ArrayBuffer} buffer
+	 * @return {Promise<CompressedTexture>}
+	 */
+	_createTexture: function ( buffer ) {
+
+		var worker;
+		var taskID;
+
+		var texturePending = this._getWorker()
+			.then( ( _worker ) => {
+
+				worker = _worker;
+				taskID = this.workerNextTaskID ++;
+
+				return new Promise( ( resolve, reject ) => {
+
+					worker._callbacks[ taskID ] = { resolve, reject };
+					worker._taskCosts[ taskID ] = buffer.byteLength;
+					worker._taskLoad += worker._taskCosts[ taskID ];
+
+					worker.postMessage( { type: 'transcode', id: taskID, buffer }, [ buffer ] );
+
+				} );
+
+			} )
+			.then( ( message ) => {
+
+				var config = this.workerConfig;
+
+				var { width, height, mipmaps, format } = message;
+
+				var texture;
+
+				switch ( format ) {
+
+					case BasisTextureLoader.BASIS_FORMAT.cTFASTC_4x4:
+						texture = new CompressedTexture( mipmaps, width, height, RGBA_ASTC_4x4_Format );
+						break;
+					case BasisTextureLoader.BASIS_FORMAT.cTFBC1:
+					case BasisTextureLoader.BASIS_FORMAT.cTFBC3:
+						texture = new CompressedTexture( mipmaps, width, height, BasisTextureLoader.DXT_FORMAT_MAP[ config.format ], UnsignedByteType );
+						break;
+					case BasisTextureLoader.BASIS_FORMAT.cTFETC1:
+						texture = new CompressedTexture( mipmaps, width, height, RGB_ETC1_Format );
+						break;
+					case BasisTextureLoader.BASIS_FORMAT.cTFPVRTC1_4_RGB:
+						texture = new CompressedTexture( mipmaps, width, height, RGB_PVRTC_4BPPV1_Format );
+						break;
+					case BasisTextureLoader.BASIS_FORMAT.cTFPVRTC1_4_RGBA:
+						texture = new CompressedTexture( mipmaps, width, height, RGBA_PVRTC_4BPPV1_Format );
+						break;
+					default:
+						throw new Error( 'THREE.BasisTextureLoader: No supported format available.' );
+
+				}
+
+				texture.minFilter = mipmaps.length === 1 ? LinearFilter : LinearMipMapLinearFilter;
+				texture.magFilter = LinearFilter;
+				texture.generateMipmaps = false;
+				texture.needsUpdate = true;
+
+				return texture;
+
+			} );
+
+		texturePending
+			.finally( () => {
+
+				if ( worker && taskID ) {
+
+					worker._taskLoad -= worker._taskCosts[ taskID ];
+					delete worker._callbacks[ taskID ];
+					delete worker._taskCosts[ taskID ];
+
+				}
+
+			} );
+
+		return texturePending;
+
+	},
+
+	_initTranscoder: function () {
+
+		if ( ! this.transcoderBinary ) {
+
+			// Load transcoder wrapper.
+			var jsLoader = new FileLoader( this.manager );
+			jsLoader.setPath( this.transcoderPath );
+			var jsContent = new Promise( ( resolve, reject ) => {
+
+				jsLoader.load( 'basis_transcoder.js', resolve, undefined, reject );
+
+			} );
+
+			// Load transcoder WASM binary.
+			var binaryLoader = new FileLoader( this.manager );
+			binaryLoader.setPath( this.transcoderPath );
+			binaryLoader.setResponseType( 'arraybuffer' );
+			var binaryContent = new Promise( ( resolve, reject ) => {
+
+				binaryLoader.load( 'basis_transcoder.wasm', resolve, undefined, reject );
+
+			} );
+
+			this.transcoderPending = Promise.all( [ jsContent, binaryContent ] )
+				.then( ( [ jsContent, binaryContent ] ) => {
+
+					var fn = BasisTextureLoader.BasisWorker.toString();
+
+					var body = [
+						'/* basis_transcoder.js */',
+						jsContent,
+						'/* worker */',
+						fn.substring( fn.indexOf( '{' ) + 1, fn.lastIndexOf( '}' ) )
+					].join( '\n' );
+
+					this.workerSourceURL = URL.createObjectURL( new Blob( [ body ] ) );
+					this.transcoderBinary = binaryContent;
+
+				} );
+
+		}
+
+		return this.transcoderPending;
+
+	},
+
+	_getWorker: function () {
+
+		return this._initTranscoder().then( () => {
+
+			if ( this.workerPool.length < this.workerLimit ) {
+
+				var worker = new Worker( this.workerSourceURL );
+
+				worker._callbacks = {};
+				worker._taskCosts = {};
+				worker._taskLoad = 0;
+
+				worker.postMessage( {
+					type: 'init',
+					config: this.workerConfig,
+					transcoderBinary: this.transcoderBinary,
+				} );
+
+				worker.onmessage = function ( e ) {
+
+					var message = e.data;
+
+					switch ( message.type ) {
+
+						case 'transcode':
+							worker._callbacks[ message.id ].resolve( message );
+							break;
+
+						case 'error':
+							worker._callbacks[ message.id ].reject( message );
+							break;
+
+						default:
+							console.error( 'THREE.BasisTextureLoader: Unexpected message, "' + message.type + '"' );
+
+					}
+
+				};
+
+				this.workerPool.push( worker );
+
+			} else {
+
+				this.workerPool.sort( function ( a, b ) {
+
+					return a._taskLoad > b._taskLoad ? - 1 : 1;
+
+				} );
+
+			}
+
+			return this.workerPool[ this.workerPool.length - 1 ];
+
+		} );
+
+	},
+
+	dispose: function () {
+
+		for ( var i = 0; i < this.workerPool.length; i ++ ) {
+
+			this.workerPool[ i ].terminate();
+
+		}
+
+		this.workerPool.length = 0;
+
+		return this;
+
+	}
+
+} );
+
+/* CONSTANTS */
+
+BasisTextureLoader.BASIS_FORMAT = {
+	cTFETC1: 0,
+	cTFETC2: 1,
+	cTFBC1: 2,
+	cTFBC3: 3,
+	cTFBC4: 4,
+	cTFBC5: 5,
+	cTFBC7_M6_OPAQUE_ONLY: 6,
+	cTFBC7_M5: 7,
+	cTFPVRTC1_4_RGB: 8,
+	cTFPVRTC1_4_RGBA: 9,
+	cTFASTC_4x4: 10,
+	cTFATC_RGB: 11,
+	cTFATC_RGBA_INTERPOLATED_ALPHA: 12,
+	cTFRGBA32: 13,
+	cTFRGB565: 14,
+	cTFBGR565: 15,
+	cTFRGBA4444: 16,
+};
+
+// DXT formats, from:
+// http://www.khronos.org/registry/webgl/extensions/WEBGL_compressed_texture_s3tc/
+BasisTextureLoader.DXT_FORMAT = {
+	COMPRESSED_RGB_S3TC_DXT1_EXT: 0x83F0,
+	COMPRESSED_RGBA_S3TC_DXT1_EXT: 0x83F1,
+	COMPRESSED_RGBA_S3TC_DXT3_EXT: 0x83F2,
+	COMPRESSED_RGBA_S3TC_DXT5_EXT: 0x83F3,
+};
+BasisTextureLoader.DXT_FORMAT_MAP = {};
+BasisTextureLoader.DXT_FORMAT_MAP[ BasisTextureLoader.BASIS_FORMAT.cTFBC1 ] =
+	BasisTextureLoader.DXT_FORMAT.COMPRESSED_RGB_S3TC_DXT1_EXT;
+BasisTextureLoader.DXT_FORMAT_MAP[ BasisTextureLoader.BASIS_FORMAT.cTFBC3 ] =
+	BasisTextureLoader.DXT_FORMAT.COMPRESSED_RGBA_S3TC_DXT5_EXT;
+
+/* WEB WORKER */
+
+BasisTextureLoader.BasisWorker = function () {
+
+	var config;
+	var transcoderPending;
+	var _BasisFile;
+
+	onmessage = function ( e ) {
+
+		var message = e.data;
+
+		switch ( message.type ) {
+
+			case 'init':
+				config = message.config;
+				init( message.transcoderBinary );
+				break;
+
+			case 'transcode':
+				transcoderPending.then( () => {
+
+					try {
+
+						var { width, height, hasAlpha, mipmaps, format } = transcode( message.buffer );
+
+						var buffers = [];
+
+						for ( var i = 0; i < mipmaps.length; ++ i ) {
+
+							buffers.push( mipmaps[ i ].data.buffer );
+
+						}
+
+						self.postMessage( { type: 'transcode', id: message.id, width, height, hasAlpha, mipmaps, format }, buffers );
+
+					} catch ( error ) {
+
+						console.error( error );
+
+						self.postMessage( { type: 'error', id: message.id, error: error.message } );
+
+					}
+
+				} );
+				break;
+
+		}
+
+	};
+
+	function init( wasmBinary ) {
+
+		var BasisModule;
+		transcoderPending = new Promise( ( resolve ) => {
+
+			BasisModule = { wasmBinary, onRuntimeInitialized: resolve };
+			BASIS( BasisModule );
+
+		} ).then( () => {
+
+			var { BasisFile, initializeBasis } = BasisModule;
+
+			_BasisFile = BasisFile;
+
+			initializeBasis();
+
+		} );
+
+	}
+
+	function transcode( buffer ) {
+
+		var basisFile = new _BasisFile( new Uint8Array( buffer ) );
+
+		var width = basisFile.getImageWidth( 0, 0 );
+		var height = basisFile.getImageHeight( 0, 0 );
+		var levels = basisFile.getNumLevels( 0 );
+		var hasAlpha = basisFile.getHasAlpha();
+
+		function cleanup() {
+
+			basisFile.close();
+			basisFile.delete();
+
+		}
+
+		if ( ! hasAlpha ) {
+
+			switch ( config.format ) {
+
+				case 9: // Hardcoded: BasisTextureLoader.BASIS_FORMAT.cTFPVRTC1_4_RGBA
+					config.format = 8; // Hardcoded: BasisTextureLoader.BASIS_FORMAT.cTFPVRTC1_4_RGB;
+					break;
+				default:
+					break;
+
+			}
+
+		}
+
+		if ( ! width || ! height || ! levels ) {
+
+			cleanup();
+			throw new Error( 'THREE.BasisTextureLoader:  Invalid .basis file' );
+
+		}
+
+		if ( ! basisFile.startTranscoding() ) {
+
+			cleanup();
+			throw new Error( 'THREE.BasisTextureLoader: .startTranscoding failed' );
+
+		}
+
+		var mipmaps = [];
+
+		for ( var mip = 0; mip < levels; mip ++ ) {
+
+			var mipWidth = basisFile.getImageWidth( 0, mip );
+			var mipHeight = basisFile.getImageHeight( 0, mip );
+			var dst = new Uint8Array( basisFile.getImageTranscodedSizeInBytes( 0, mip, config.format ) );
+
+			var status = basisFile.transcodeImage(
+				dst,
+				0,
+				mip,
+				config.format,
+				0,
+				hasAlpha
+			);
+
+			if ( ! status ) {
+
+				cleanup();
+				throw new Error( 'THREE.BasisTextureLoader: .transcodeImage failed.' );
+
+			}
+
+			mipmaps.push( { data: dst, width: mipWidth, height: mipHeight } );
+
+		}
+
+		cleanup();
+
+		return { width, height, hasAlpha, mipmaps, format: config.format };
+
+	}
+
+};
+
+// export { PMREMGenerator } from '../examples/jsm/loaders/PMREMGenerator.js';
+// export { EquirectangularToCubeGenerator } from '../examples/jsm/loaders/EquirectangularToCubeGenerator.js';
+
+export { ACESFilmicToneMapping, AddEquation, AddOperation, AdditiveBlending, AlphaFormat, AlwaysDepth, AmbientLight, AmbientLightProbe, AnimationClip, AnimationLoader, AnimationMixer, AnimationObjectGroup, AnimationUtils, ArcCurve, ArrayCamera, ArrowHelper, Audio, AudioAnalyser, AudioContext, AudioListener, AudioLoader, AxesHelper, AxisHelper, BackSide, BasicDepthPacking, BasicShadowMap, BasisTextureLoader, BinaryTextureLoader, Bone, BooleanKeyframeTrack, BoundingBoxHelper, Box2, Box3, Box3Helper, BoxBufferGeometry, BoxGeometry, BoxHelper, BufferAttribute, BufferGeometry, BufferGeometryLoader, BufferGeometryUtils, ByteType, Cache, Camera, CameraHelper, CanvasRenderer, CanvasTexture, CatmullRomCurve3, CineonToneMapping, CircleBufferGeometry, CircleGeometry, ClampToEdgeWrapping, Clock, ClosedSplineCurve3, ColladaExporter, ColladaLoader, Color, ColorKeyframeTrack, CompressedTexture, CompressedTextureLoader, ConeBufferGeometry, ConeGeometry, CopyShader, CubeCamera, BoxGeometry as CubeGeometry, CubeReflectionMapping, CubeRefractionMapping, CubeTexture, CubeTextureLoader, CubeUVReflectionMapping, CubeUVRefractionMapping, CubicBezierCurve, CubicBezierCurve3, CubicInterpolant, CullFaceBack, CullFaceFront, CullFaceFrontBack, CullFaceNone, Curve, CurvePath, CustomBlending, CylinderBufferGeometry, CylinderGeometry, Cylindrical, DDSLoader, DRACOLoader, DataTexture, DataTexture2DArray, DataTexture3D, DataTextureLoader, DefaultLoadingManager, DepthFormat, DepthStencilFormat, DepthTexture, DirectionalLight, DirectionalLightHelper, DirectionalLightShadow, DiscreteInterpolant, DodecahedronBufferGeometry, DodecahedronGeometry, DoubleSide, DstAlphaFactor, DstColorFactor, DynamicBufferAttribute, EdgesGeometry, EdgesHelper, EditorControls, EffectComposer, EllipseCurve, EqualDepth, EquirectangularReflectionMapping, EquirectangularRefractionMapping, Euler, EventDispatcher, ExtrudeBufferGeometry, ExtrudeGeometry, FBXLoader, FXAAShader, Face3, Face4, FaceColors, FaceNormalsHelper, FileLoader, FlatShading, Float32Attribute, Float32BufferAttribute, Float64Attribute, Float64BufferAttribute, FloatType, Fog, FogExp2, Font, FontLoader, FrontFaceDirectionCCW, FrontFaceDirectionCW, FrontSide, Frustum, GLTFExporter, GLTFLoader, GammaEncoding, Geometry, GeometryUtils, GreaterDepth, GreaterEqualDepth, GridHelper, Group, HalfFloatType, HemisphereLight, HemisphereLightHelper, HemisphereLightProbe, IcosahedronBufferGeometry, IcosahedronGeometry, ImageBitmapLoader, ImageLoader, ImageUtils, ImmediateRenderObject, InstancedBufferAttribute, InstancedBufferGeometry, InstancedInterleavedBuffer, Int16Attribute, Int16BufferAttribute, Int32Attribute, Int32BufferAttribute, Int8Attribute, Int8BufferAttribute, IntType, InterleavedBuffer, InterleavedBufferAttribute, Interpolant, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, JSONLoader, KTXLoader, KeyframeTrack, LOD, LatheBufferGeometry, LatheGeometry, Layers, LensFlare, LessDepth, LessEqualDepth, Light, LightProbe, LightProbeHelper, LightShadow, Line, Line3, LineBasicMaterial, LineCurve, LineCurve3, LineDashedMaterial, LineLoop, LinePieces, LineSegments, LineStrip, LinearEncoding, LinearFilter, LinearInterpolant, LinearMipMapLinearFilter, LinearMipMapNearestFilter, LinearToneMapping, Loader, LoaderUtils, LoadingManager, LogLuvEncoding, LoopOnce, LoopPingPong, LoopRepeat, LuminanceAlphaFormat, LuminanceFormat, MOUSE, MTLLoader, Material, MaterialLoader, _Math as Math, Matrix3, Matrix4, MaxEquation, Mesh, MeshBasicMaterial, MeshDepthMaterial, MeshDistanceMaterial, MeshFaceMaterial, MeshLambertMaterial, MeshMatcapMaterial, MeshNormalMaterial, MeshPhongMaterial, MeshPhysicalMaterial, MeshStandardMaterial, MeshToonMaterial, MinEquation, MirroredRepeatWrapping, MixOperation, MultiMaterial, MultiplyBlending, MultiplyOperation, NearestFilter, NearestMipMapLinearFilter, NearestMipMapNearestFilter, NeverDepth, NoBlending, NoColors, NoToneMapping, NormalBlending, NotEqualDepth, NumberKeyframeTrack, OBJExporter, OBJLoader, Object3D, ObjectLoader, ObjectSpaceNormalMap, OctahedronBufferGeometry, OctahedronGeometry, OneFactor, OneMinusDstAlphaFactor, OneMinusDstColorFactor, OneMinusSrcAlphaFactor, OneMinusSrcColorFactor, OrthographicCamera, OutlinePass, PCFShadowMap, PCFSoftShadowMap, PVRLoader, ParametricBufferGeometry, ParametricGeometry, Particle, ParticleBasicMaterial, ParticleSystem, ParticleSystemMaterial, Pass, Path, PerspectiveCamera, Plane, PlaneBufferGeometry, PlaneGeometry, PlaneHelper, PointCloud, PointCloudMaterial, PointLight, PointLightHelper, Points, PointsMaterial, PolarGridHelper, PolyhedronBufferGeometry, PolyhedronGeometry, PositionalAudio, PositionalAudioHelper, PropertyBinding, PropertyMixer, QuadraticBezierCurve, QuadraticBezierCurve3, Quaternion, QuaternionKeyframeTrack, QuaternionLinearInterpolant, REVISION, RGBADepthPacking, RGBAFormat, RGBA_ASTC_10x10_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGBDEncoding, RGBEEncoding, RGBEFormat, RGBFormat, RGBM16Encoding, RGBM7Encoding, RGB_ETC1_Format, RGB_PVRTC_2BPPV1_Format, RGB_PVRTC_4BPPV1_Format, RGB_S3TC_DXT1_Format, RawShaderMaterial, Ray, Raycaster, RaytracingRenderer, RectAreaLight, RectAreaLightHelper, RedFormat, ReinhardToneMapping, RenderPass, RepeatWrapping, ReverseSubtractEquation, RingBufferGeometry, RingGeometry, SMAAPass, SSAARenderPass, STLExporter, SVGObject, SVGRenderer, Scene, SceneUtils, ShaderChunk, ShaderLib, ShaderMaterial, ShaderPass, ShadowMaterial, Shape, ShapeBufferGeometry, ShapeGeometry, ShapePath, ShapeUtils, ShortType, Skeleton, SkeletonHelper, SkinnedMesh, SmoothShading, SoftwareRenderer, Sphere, SphereBufferGeometry, SphereGeometry, Spherical, SphericalHarmonics3, SphericalReflectionMapping, Spline, SplineCurve, SplineCurve3, SpotLight, SpotLightHelper, SpotLightShadow, Sprite, SpriteMaterial, SrcAlphaFactor, SrcAlphaSaturateFactor, SrcColorFactor, StereoCamera, StringKeyframeTrack, SubtractEquation, SubtractiveBlending, TGALoader, TangentSpaceNormalMap, TeapotBufferGeometry, TetrahedronBufferGeometry, TetrahedronGeometry, TextBufferGeometry, TextGeometry, Texture, TextureLoader, TorusBufferGeometry, TorusGeometry, TorusKnotBufferGeometry, TorusKnotGeometry, TransformControls, TransformControlsGizmo, TransformControlsPlane, Triangle, TriangleFanDrawMode, TriangleStripDrawMode$1 as TriangleStripDrawMode, TrianglesDrawMode, TubeBufferGeometry, TubeGeometry, UVMapping, Uint16Attribute, Uint16BufferAttribute, Uint32Attribute, Uint32BufferAttribute, Uint8Attribute, Uint8BufferAttribute, Uint8ClampedAttribute, Uint8ClampedBufferAttribute, Uncharted2ToneMapping, Uniform, UniformsLib, UniformsUtils, UnsignedByteType, UnsignedInt248Type, UnsignedIntType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedShort565Type, UnsignedShortType, VREffect, Vector2, Vector3, Vector4, VectorKeyframeTrack, Vertex, VertexColors, VertexNormalsHelper, VideoTexture, WebGLMultisampleRenderTarget, WebGLRenderTarget, WebGLRenderTargetCube, WebGLRenderer, WebGLUtils, WireframeGeometry, WireframeHelper, WrapAroundEnding, XHRLoader, ZeroCurvatureEnding, ZeroFactor, ZeroSlopeEnding, sRGBEncoding };

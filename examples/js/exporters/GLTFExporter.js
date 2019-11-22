@@ -897,8 +897,8 @@ THREE.GLTFExporter.prototype = {
 
 			if ( material.isShaderMaterial ) {
 
-				console.warn( 'GLTFExporter: THREE.ShaderMaterial not supported.' );
-				return null;
+				// console.warn( 'GLTFExporter: THREE.ShaderMaterial not supported.' );
+				return processShaderMaterial( material );
 
 			}
 
@@ -1069,6 +1069,7 @@ THREE.GLTFExporter.prototype = {
 
 			}
 
+			// 序列化userData
 			serializeUserData( material, gltfMaterial );
 
 			outputJSON.materials.push( gltfMaterial );
@@ -1078,6 +1079,21 @@ THREE.GLTFExporter.prototype = {
 
 			return index;
 
+		}
+
+		function processShaderMaterial( material ) {
+
+			var gltfShaderMaterial = {
+				type: 'ShaderMaterial'
+			};
+			console.log('material', material.uniforms);
+
+			outputJSON.materials.push( gltfShaderMaterial );
+
+			var index = outputJSON.materials.length - 1;
+			cachedData.materials.set( material, index );
+
+			return index;
 		}
 
 		/**
@@ -1968,6 +1984,7 @@ THREE.GLTFExporter.prototype = {
 		}
 
 		processInput( input );
+		console.log( 'sdsd', outputJSON );
 
 		Promise.all( pending ).then( function () {
 
