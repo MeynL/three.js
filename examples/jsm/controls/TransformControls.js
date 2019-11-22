@@ -24,7 +24,8 @@ import {
 	Raycaster,
 	SphereBufferGeometry,
 	TorusBufferGeometry,
-	Vector3
+	Vector3,
+	Box3,
 } from "../../../src/Three.js";
 
 var TransformControls = function ( camera, domElement ) {
@@ -41,6 +42,8 @@ var TransformControls = function ( camera, domElement ) {
 
 	var _plane = new TransformControlsPlane();
 	this.add( _plane );
+
+	var _objects = [];
 
 	var scope = this;
 
@@ -61,6 +64,8 @@ var TransformControls = function ( camera, domElement ) {
 	defineProperty( "showX", true );
 	defineProperty( "showY", true );
 	defineProperty( "showZ", true );
+	defineProperty( "box", new Box3() );
+	defineProperty( "isAttach", false );
 
 	var changeEvent = { type: "change" };
 	var mouseDownEvent = { type: "mouseDown" };
@@ -307,6 +312,8 @@ var TransformControls = function ( camera, domElement ) {
 				quaternionStart.copy( this.object.quaternion );
 				scaleStart.copy( this.object.scale );
 
+				this.box.setFromObject( this.object );
+
 				this.object.matrixWorld.decompose( worldPositionStart, worldQuaternionStart, worldScaleStart );
 
 				pointStart.copy( planeIntersect.point ).sub( worldPositionStart );
@@ -342,7 +349,19 @@ var TransformControls = function ( camera, domElement ) {
 
 		ray.setFromCamera( pointer, this.camera );
 
-		var planeIntersect = ray.intersectObjects( [ _plane ], true )[ 0 ] || false;
+		var planeIntersect;
+
+		var interactionObjects = _objects.filter( v => v.uuid !== object.uuid );
+
+		if ( mode === 'translate' && scope.isAttach && interactionObjects.length > 0 ) {
+
+			planeIntersect = ray.intersectObjects( interactionObjects )[ 0 ] || false;
+
+		} else {
+
+			planeIntersect = ray.intersectObjects( [ _plane ], true )[ 0 ] || false;
+
+		}
 
 		if ( planeIntersect === false ) return;
 
@@ -662,6 +681,34 @@ var TransformControls = function ( camera, domElement ) {
 	this.update = function () {
 
 		console.warn( 'THREE.TransformControls: update function has been depricated.' );
+
+	};
+
+	this.setAttach = function ( isAttach ) {
+
+		scope.isAttach = isAttach;
+
+	};
+
+	this.setAttachObjects = function ( objects ) {
+
+		if ( Array.isArray( objects ) && objects.length > 0 ) {
+
+			objects.forEach( function ( object ) {
+
+				object.traverseVisible( function ( child ) {
+
+					_objects.push( child );
+
+				} );
+
+			} );
+
+		} else {
+
+			_objects = [];
+
+		}
 
 	};
 

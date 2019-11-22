@@ -16,8 +16,7 @@ export class DRACOLoader {
 	public decoderConfig;
 	public decoderModulePromise;
 
-	constructor(manager?) {
-	}
+	constructor(manager?);
 
 	load (url, onLoad, onProgress, onError): void;
 	setPath(value): this;
