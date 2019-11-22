@@ -2,7 +2,8 @@ import {
   Object3D,
   Camera,
   Vector3,
-  Euler
+  Euler,
+  Box3,
 } from '../../../src/Three';
 
 export class TransformControls extends Object3D {
@@ -27,6 +28,8 @@ export class TransformControls extends Object3D {
   showZ: boolean;
   isTransformControls: boolean;
   visible: boolean;
+  box: Box3;
+  isAttach: boolean;
 
   attach(object: Object3D): this;
   detach(): void;
@@ -42,5 +45,7 @@ export class TransformControls extends Object3D {
   setSpace(space: string): void;
   dispose(): void;
   update(): void;
+  setAttach(isAttach: boolean): void;
+  setAttachObjects(objects: Object3D[]): void;
 
 }
