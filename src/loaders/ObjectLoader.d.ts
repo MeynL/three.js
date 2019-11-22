@@ -26,7 +26,7 @@ export class ObjectLoader {
 	parseAnimations( json: any ): AnimationClip[];
 	parseImages(
 		json: any,
-		onLoad: () => void
+		onLoad?: () => void
 	): { [key: string]: HTMLImageElement };
 	parseTextures( json: any, images: any ): Texture[];
 	parseObject<T extends Object3D>(
