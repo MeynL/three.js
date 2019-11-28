@@ -8,7 +8,7 @@
   "module": "build/three.module.js",
   "types": "src/Three.d.ts",
   "publishConfig": {
-    "registry": "http://192.168.0.200:8081/repository/tamu-npm-host/"
+    "registry": "http://192.168.50.122:8081/repository/tamu-npm-host/"
   },
   "files": [
     "build/three.js",
