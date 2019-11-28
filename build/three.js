@@ -50836,6 +50836,11 @@
 
 			material = materials[0];
 
+		} else {
+
+			material = new MeshPhongMaterial({color: 0xcccccc});
+			// materials.push(material);
+
 		}
 
 		if ('color' in geometry.attributes) {

@@ -1982,7 +1982,7 @@ function createMesh(FBXTree, relationships, geometryMap, materialMap) {
 
 	} else {
 
-		// material = new MeshPhongMaterial({color: 0xcccccc});
+		material = new MeshPhongMaterial({color: 0xcccccc});
 		// materials.push(material);
 
 	}
