@@ -158,6 +158,9 @@ export { WebGLUtils } from './renderers/webgl/WebGLUtils.js';
 export * from './constants.js';
 export * from './Three.Legacy.js';
 
+export { FBXLoader } from '../examples/jsm/loaders/FBXLoader.js';
+export { DDSLoader } from '../examples/jsm/loaders/DDSLoader.js';
+export { TamuCompressedTextureLoader } from './loaders/TamuCompressedTextureLoader.js';
 if ( typeof __THREE_DEVTOOLS__ !== 'undefined' ) {
 
 	/* eslint-disable no-undef */
@@ -167,3 +170,4 @@ if ( typeof __THREE_DEVTOOLS__ !== 'undefined' ) {
 	/* eslint-enable no-undef */
 
 }
+

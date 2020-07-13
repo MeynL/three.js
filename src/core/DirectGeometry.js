@@ -11,6 +11,8 @@ function DirectGeometry() {
 	this.colors = [];
 	this.uvs = [];
 	this.uvs2 = [];
+	this.uvs3 = [];
+	this.uvs4 = [];
 
 	this.groups = [];
 
@@ -90,6 +92,8 @@ Object.assign( DirectGeometry.prototype, {
 
 		const hasFaceVertexUv = faceVertexUvs[ 0 ] && faceVertexUvs[ 0 ].length > 0;
 		const hasFaceVertexUv2 = faceVertexUvs[ 1 ] && faceVertexUvs[ 1 ].length > 0;
+		const hasFaceVertexUv3 = faceVertexUvs[ 2 ] && faceVertexUvs[ 2 ].length > 0;
+		const hasFaceVertexUv4 = faceVertexUvs[ 3 ] && faceVertexUvs[ 3 ].length > 0;
 
 		// morphs
 
@@ -218,6 +222,43 @@ Object.assign( DirectGeometry.prototype, {
 					console.warn( 'THREE.DirectGeometry.fromGeometry(): Undefined vertexUv2 ', i );
 
 					this.uvs2.push( new Vector2(), new Vector2(), new Vector2() );
+
+				}
+
+			}
+
+
+			if ( hasFaceVertexUv3 === true ) {
+
+				const vertexUvs = faceVertexUvs[ 2 ][ i ];
+
+				if ( vertexUvs !== undefined ) {
+
+					this.uvs3.push( vertexUvs[ 0 ], vertexUvs[ 1 ], vertexUvs[ 2 ] );
+
+				} else {
+
+					console.warn( 'THREE.DirectGeometry.fromGeometry(): Undefined vertexUv3 ', i );
+
+					this.uvs3.push( new Vector2(), new Vector2(), new Vector2() );
+
+				}
+
+			}
+
+			if ( hasFaceVertexUv4 === true ) {
+
+				const vertexUvs = faceVertexUvs[ 3 ][ i ];
+
+				if ( vertexUvs !== undefined ) {
+
+					this.uvs4.push( vertexUvs[ 0 ], vertexUvs[ 1 ], vertexUvs[ 2 ] );
+
+				} else {
+
+					console.warn( 'THREE.DirectGeometry.fromGeometry(): Undefined vertexUv4 ', i );
+
+					this.uvs4.push( new Vector2(), new Vector2(), new Vector2() );
 
 				}
 

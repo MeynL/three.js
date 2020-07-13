@@ -1,6 +1,6 @@
 {
   "name": "three",
-  "version": "0.118.3",
+  "version": "10.118.3",
   "description": "JavaScript 3D library",
   "main": "build/three.js",
   "module": "build/three.module.js",
@@ -92,6 +92,9 @@
     "rollup-plugin-buble": "^0.19.8",
     "typescript": "^3.9.5"
   },
+  "publishConfig": {
+    "registry": "http://192.168.50.65:8081/repository/local-npm/"
+  },
   "jspm": {
     "files": [
       "package.json",
@@ -104,3 +107,4 @@
     "directories": {}
   }
 }
+

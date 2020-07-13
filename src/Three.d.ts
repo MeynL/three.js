@@ -174,4 +174,7 @@ export * from './renderers/webgl/WebGLUniforms';
 export * from './constants';
 export * from './Three.Legacy';
 
+export * from '../examples/jsm/loaders/FBXLoader';
+export * from '../examples/jsm/loaders/DDSLoader';
+export * from './loaders/TamuCompressedTextureLoader';
 export as namespace THREE;
